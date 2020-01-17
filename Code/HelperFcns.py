@@ -35,15 +35,7 @@ def removeOutliers(S, n_std=2, returnZ=True, interp=True):
     else:
         return S[np.abs(Sz) <= n_std]
 
-    # Sz = stats.zscore(S)
-    # Snew = S.copy()
-    # if returnZ:
-    #     Snew = Sz
-    #     Snew[Snew > n_std] = np.nan
-    # else:
-    #     Snew[np.abs(Sz)>n_std] = np.nan #need to check Sz and S for nans! (throws # WARNING: )
-    # return Snew.interpolate()
-
+    
 
 #compute distance (scalar) of a joint from ref point (nose) normalized by body segment length (trunk)
 #remove outliers above 2std deviations
@@ -76,8 +68,9 @@ def dist_from_ref(dfs, jj):
 
 
 #plot PSD of univariate data
-def plot_PSD(df, subj, jj, task, cycles, ax):
+def plot_PSD(df, subj, jj, task, cycles, ax, col=None):
     Fs = 30 #sampling frequency (frame rate)
+    cols = ['g','r']
     legend_sc = []
     for s, cycle in product(subj,cycles):
         dfs = df.query('SubjID == @s & Task==@task & cycle==@cycle').copy()
@@ -85,9 +78,10 @@ def plot_PSD(df, subj, jj, task, cycles, ax):
             p=dist_from_ref(dfs,jj)
             f, Pxx_den = welch(p,fs=Fs,nperseg=min(len(p),512))
 
-            # fig, ax = plt.subplots(1,2, figsize=(12,5))
-            ax[0].plot(p.index/Fs, p)
-            ax[1].plot(f, Pxx_den, alpha=0.5)
+            if ~(col is None):
+                col = cols[int(dfs.symptom.unique())]
+            ax[0].plot(p.index/Fs, p, c=col)
+            ax[1].plot(f, Pxx_den, alpha=0.5, c=col)
             legend_sc.append((s,cycle))
         else:
             continue
