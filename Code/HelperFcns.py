@@ -10,11 +10,39 @@ import matplotlib.pyplot as plt
 #2) set to null z-score data above n_std
 #3) resample (linear) original series and return
 #note that the argument is passed by reference (modifies original series S)
-def removeOutliers(S, n_std=3):
-    Sz = stats.zscore(S)
-    Snew = S.copy()
-    Snew[np.abs(Sz)>n_std] = np.nan #need to check Sz and S for nans! (throws # WARNING: )
-    return Snew.interpolate()
+def removeOutliers(S, n_std=2, returnZ=True, interp=True):
+
+    mu = S.mean(); sigma = S.std()
+    Sz = S.copy()
+    if sigma == 0:
+        print('std dev = 0 - returning unmodified series')
+        return Sz
+
+    Sz = (Sz-mu)/sigma
+
+    if returnZ & interp: #remove outliers and interpolate; return z-normalized
+        Sz[np.abs(Sz) > n_std] = np.nan
+        return Sz.interpolate()
+
+    elif returnZ & ~interp: #remove outliers and return z-normalized
+        return Sz[np.abs(Sz) <= n_std]
+
+    elif ~returnZ & interp: #remove outliers
+        Snew = S.copy()
+        Snew[np.abs(Sz) > n_std] = np.nan
+        return Snew.interpolate()
+
+    else:
+        return S[np.abs(Sz) <= n_std]
+
+    # Sz = stats.zscore(S)
+    # Snew = S.copy()
+    # if returnZ:
+    #     Snew = Sz
+    #     Snew[Snew > n_std] = np.nan
+    # else:
+    #     Snew[np.abs(Sz)>n_std] = np.nan #need to check Sz and S for nans! (throws # WARNING: )
+    # return Snew.interpolate()
 
 
 #compute distance (scalar) of a joint from ref point (nose) normalized by body segment length (trunk)
@@ -29,33 +57,41 @@ def dist_from_ref(dfs, jj):
 
     #normalization factor (hip length)
     L = (np.sqrt( (data.midHip_x -data.neck_x)**2 + (data.midHip_y-data.neck_y)**2) ) #trunk length (ref length)
-    L = removeOutliers(L,2) #remove outliers and linearly interpolate
+    L = removeOutliers(L, 2, returnZ=False, interp=True) #remove outliers and linearly interpolate
 
     #Detrend data: distance from nose (ref point) normalized by trunk length
     p = (np.sqrt((data[jj+'x'] - data.nose_x)**2 + (data[jj+'y'] - data.nose_y)**2))/L
-    data[jj] = p
 
-    #outlier rejection
-    data[jj] = removeOutliers(data[jj],2)
-    data.dropna(inplace=True)
-    return data[jj]
+    #outlier rejection and z-score
+    pclean = removeOutliers(p, 2, returnZ=True, interp=False)
+    #smooth data
+    try:
+        pfilt =  pd.Series(index=pclean.index, data=signal.savgol_filter(pclean, 13, 2))
+    except:
+        print('filter fitting failed - not filtering data')
+        pfilt = pclean.copy()
 
-def plot_fft(df, subj, jj, task, cycles, ax):
+    # data.dropna(inplace=True)
+    return pfilt
+
+
+#plot PSD of univariate data
+def plot_PSD(df, subj, jj, task, cycles, ax):
     Fs = 30 #sampling frequency (frame rate)
     legend_sc = []
     for s, cycle in product(subj,cycles):
         dfs = df.query('SubjID == @s & Task==@task & cycle==@cycle').copy()
         if len(dfs)>0:
             p=dist_from_ref(dfs,jj)
-            f, Pxx_den = welch(p,fs=Fs,nperseg=512)
+            f, Pxx_den = welch(p,fs=Fs,nperseg=min(len(p),512))
 
             # fig, ax = plt.subplots(1,2, figsize=(12,5))
-            p.plot(ax=ax[0])
-            ax[1].plot(f, Pxx_den)
+            ax[0].plot(p.index/Fs, p)
+            ax[1].plot(f, Pxx_den, alpha=0.5)
             legend_sc.append((s,cycle))
         else:
             continue
-    ax[0].grid(); ax[1].grid(); ax[1].set_xlim([-0.5,10])
+    ax[0].grid(); ax[1].grid(); ax[1].set_xlim([-0.5,6])
     ax[1].legend(legend_sc)
     plt.show()
 
