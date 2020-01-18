@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats, signal
 from scipy.signal import welch
+from scipy.interpolate import CubicSpline
 from itertools import product
 import matplotlib.pyplot as plt
 
@@ -41,7 +42,7 @@ def removeOutliers(S, n_std=2, returnZ=True, interp=True):
 #remove outliers above 2std deviations
 #dfs is the dataframe with all joint positions (poses)
 #jj is the joint to compute distance
-#returns a Series with index and joint distance
+#returns a Series with index and joint distance (eg wriR_), Remember to add _ at the end
 def dist_from_ref(dfs, jj):
     data = dfs.copy()
     #remove missed detections (0s in both coords) for current joint (maybe change with nans)
@@ -67,8 +68,82 @@ def dist_from_ref(dfs, jj):
     return pfilt
 
 
+
+#plot left and right joint trajectory after removing outliers and smoothing 
+def plot_joint_trajectory(df, joint='wri', task='FtnR', subjs='All', cycle=1, size=8, colormap=False, zscore=True):
+    
+    markers = ('o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X')
+    # joints = ['wriL_', 'wriR_', 'thumbL_', 'thumbR_','indexL_', 'indexR_',]
+    joints = [joint+'L_', joint+'R_']
+    frame_rate = 30 #pretty much the same across movies
+    
+    T = 20 #end plot time [s]
+        
+    if subjs == 'All':
+        subjs = df.SubjID.unique()
+        
+    fig, ax = plt.subplots(1,2, sharex=True, sharey=True, figsize=(12,6))
+    ax = ax.ravel()
+    
+    for si, s in enumerate(subjs):
+
+        dfs = df.query('SubjID == @s & Task==@task & cycle==@cycle').copy()    
+        dfs = dfs[:int(T*frame_rate)]
+        
+        if dfs.empty:
+            print('no data found for {}, {}, cycle {}'.format(s, task, cycle))
+            continue
+                
+        for i, jj in enumerate(joints):
+            
+            data = dfs.copy()
+            #remove missed detections (0s in both coords) for current joint
+            data = data[ (data[jj+'x'] > 0) & (data[jj+'y'] > 0)]
+            
+            #normalization factor (hip length)    
+            L = (np.sqrt( (data.midHip_x -data.neck_x)**2 + (data.midHip_y-data.neck_y)**2) ) #trunk length (ref length)            
+            L = removeOutliers(L, 2, returnZ=False) #remove outliers and linearly interpolate missing points (need to reject if not enough points)
+                        
+            #Detrend data: distance from nose (ref point) normalized by trunk length
+            p = (np.sqrt((data[jj+'x'] - data.nose_x)**2 + (data[jj+'y'] - data.nose_y)**2))/L 
+            data[jj] = p 
+
+            #outlier rejection
+            data[jj] = removeOutliers(data[jj],2, returnZ=zscore, interp=False) #remove outliers - do not interpolate
+            data.dropna(inplace=True)
+
+            t = data.index/frame_rate
+
+            #filter 
+            try:
+                data[jj+'filt'] = signal.savgol_filter(data[jj], 13, 2)
+                #Interpolate w Cubic spline instead
+                # cs = CubicSpline(t, data[jj])
+                # data[jj+'filt'] = cs(t)  
+            except:
+                print('error fitting filter on ', s, jj, len(data[jj]))
+                data[jj+'filt'] = data[jj]
+                        
+            if colormap == False:
+                ax[i].scatter(t, data[jj], s=size, alpha=0.6); 
+#                 ax[i].plot(t, data[jj], LineWidth=.5)
+                ax[i].plot(t, data[jj+'filt'], LineWidth=2, alpha=0.6)
+            else:
+                ax[i].scatter(t, data[jj], s=size, alpha=0.6, c=data[jj+'c'], cmap='cool', marker=markers[si], vmin=0, vmax=1); 
+#                 ax[i].plot(t, data[jj], LineWidth=.5)
+                ax[i].plot(t, data[jj+'filt'], LineWidth=2, alpha=0.6)
+                
+            ax[i].set_title(jj+task+str(cycle))
+            
+                    
+    for i in range(len(joints)):
+        ax[i].grid()
+        ax[i].legend(subjs)
+        
+
+
 #plot PSD of univariate data
-def plot_PSD(df, subj, jj, task, cycles, ax, col=None):
+def plot_PSD(df, subj, jj, task, cycles, ax, col=None, alpha=0.5):
     Fs = 30 #sampling frequency (frame rate)
     cols = ['g','r']
     legend_sc = []
@@ -78,10 +153,10 @@ def plot_PSD(df, subj, jj, task, cycles, ax, col=None):
             p=dist_from_ref(dfs,jj)
             f, Pxx_den = welch(p,fs=Fs,nperseg=min(len(p),512))
 
-            if ~(col is None):
+            if col is not None:
                 col = cols[int(dfs.symptom.unique())]
-            ax[0].plot(p.index/Fs, p, c=col)
-            ax[1].plot(f, Pxx_den, alpha=0.5, c=col)
+            ax[0].plot(p.index/Fs, p, 'o-', markerSize=3, c=col, alpha=alpha)
+            ax[1].plot(f, Pxx_den, alpha=alpha, c=col)
             legend_sc.append((s,cycle))
         else:
             continue
