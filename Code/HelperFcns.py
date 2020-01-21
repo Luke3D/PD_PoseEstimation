@@ -166,9 +166,8 @@ def handpose(dfs):
     #trunk vector 
     # trunk = pd.DataFrame({'x':data.midHip_x -data.neck_x, 'y':data.midHip_y-data.neck_y})
     trunk = pd.DataFrame({'x':data.neck_x -data.midHip_x, 'y':data.neck_y-data.midHip_y})
-    trunk.x = removeOutliers(trunk.x, returnZ=False)
-    trunk.y = removeOutliers(trunk.y, returnZ=False)
-
+    trunk = trunk.apply(removeOutliers, args=(2,False,True))
+    
     #hand poses (interpolate points for missing detections)
     hand = pd.DataFrame()
     joints = ['thumbR_','indexR_', 'midR_', 'ringR_', 'pinkyR_']
@@ -178,32 +177,72 @@ def handpose(dfs):
         hand = pd.concat((hand,data[j]), axis=1)
     hand[hand==0] = np.nan #missed detections are set as nans
     nmissed = max(hand.isnull().sum()/len(hand))
+    print('frac detection missing: {}'.format(nmissed))
     if nmissed > 0.5:
         print('more than 50% frames miss a finger detection!')
-    print(hand.isnull().sum()/len(hand))
+    # print(hand.isnull().sum()/len(hand))
     #remove outliers and interpolate
     hand = hand.apply(removeOutliers,args=(2,False,True))
 
-    hj = ['indexR','midR','ringR','pinkyR']
-    Theta_all = pd.DataFrame(data=[], columns=hj)
+    #thumb to other finger vector and angle relative to trunk vector
+    # hj = ['indexR','midR','ringR','pinkyR']
+    # theta_all = pd.DataFrame(data=[], columns=hj)
+    # for jj in hj:
+    #     hR = pd.DataFrame({'x':hand.thumbR_x - hand[jj+'_x'], 'y':hand.thumbR_y - hand[jj+'_y']})
+    #     hR = hR.apply(removeOutliers, args=(2,False,True))
+    #     #angle between hand vector (thumb-pinky) and trunk vector
+    #     dp, theta = dotprod_df(trunk, hR)
+    #     theta_all[jj] = theta.interpolate()
+
+    #index to others
+    hj = ['midR','ringR','pinkyR']
+    theta_all = pd.DataFrame(data=[], columns=hj)
     for jj in hj:
-        hR = pd.DataFrame({'x':hand.thumbR_x - hand[jj+'_x'], 'y':hand.thumbR_y - hand[jj+'_y']})
+        hR = pd.DataFrame({'x':hand.indexR_x - hand[jj+'_x'], 'y':hand.indexR_y - hand[jj+'_y']})
         hR = hR.apply(removeOutliers, args=(2,False,True))
         #angle between hand vector (thumb-pinky) and trunk vector
         dp, theta = dotprod_df(trunk, hR)
-        Theta_all[jj] = theta
+        theta_all[jj] = theta.interpolate()
+
+
+    #confidence values for each finger
+    theta_all_c = pd.DataFrame(data=[], columns=theta_all.columns)
+    for i in theta_all_c.columns:
+        theta_all_c[i] = dfs[i+'_c'] 
     
-    #thumb to pinky vector
-    hR = pd.DataFrame({'x':hand.thumbR_x - hand.pinkyR_x, 'y':hand.thumbR_y - hand.pinkyR_y})
-    hR = hR.apply(removeOutliers, args=(2,False,True))
-    #angle between hand vector (thumb-pinky) and trunk vector
-    dp, theta = dotprod_df(trunk, hR)
-
-    return hand, trunk, hR, Theta_all
+    return hand, trunk, theta_all, theta_all_c
 
 
 
+def plot_hand_orientation(df, s, task='RamR', cycle=1, fingers=None):
 
+    # s = 1043
+    # task = 'RamR'
+    dfs = df.query('SubjID == @s & Task==@task & cycle==@cycle').copy()    
+    hand, trunk, theta, theta_c = handpose(dfs)
+
+    if fingers is None:
+        fingers = theta.columns
+
+    plt.figure(figsize=(12,6))
+    for i in fingers:
+        print('median confidence {} = {}'.format(i, theta_c[i].median()))
+
+        try:
+            plt.plot(theta[i].index/30, signal.savgol_filter(theta[i].values, 9,2),'-', markersize=2, alpha=0.6)            
+        except:
+            plt.plot(theta[i].index/30, theta[i], '-', markersize=2, alpha=0.6)
+            print('fit failed {}',i)
+
+        plt.scatter(theta[i].index/30, theta[i], s=12, c=theta_c[i], cmap='cool', vmin=0, vmax=1, alpha=0.6)
+
+    plt.legend(fingers)
+    plt.grid() 
+
+
+#low pass filter data
+# def lowpass(x):
+    
 
 
 
