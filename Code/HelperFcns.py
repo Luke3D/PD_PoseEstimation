@@ -4,7 +4,7 @@ import os, glob
 import re, json
 from pathlib import Path
 from scipy import stats, signal
-from scipy.signal import welch
+from scipy.signal import welch, butter
 from scipy.interpolate import CubicSpline
 from itertools import product
 from numpy.linalg import multi_dot
@@ -182,6 +182,7 @@ def handpose(dfs):
         print('more than 50% frames miss a finger detection!')
     # print(hand.isnull().sum()/len(hand))
     #remove outliers and interpolate
+    hand = hand.interpolate()
     hand = hand.apply(removeOutliers,args=(2,False,True))
 
     #thumb to other finger vector and angle relative to trunk vector
@@ -194,7 +195,7 @@ def handpose(dfs):
     #     dp, theta = dotprod_df(trunk, hR)
     #     theta_all[jj] = theta.interpolate()
 
-    #index to others
+    #vector from index to others
     hj = ['midR','ringR','pinkyR']
     theta_all = pd.DataFrame(data=[], columns=hj)
     for jj in hj:
@@ -203,12 +204,20 @@ def handpose(dfs):
         #angle between hand vector (thumb-pinky) and trunk vector
         dp, theta = dotprod_df(trunk, hR)
         theta_all[jj] = theta.interpolate()
+    theta_all.apply(removeOutliers, args=(2,False,True))
 
 
     #confidence values for each finger
-    theta_all_c = pd.DataFrame(data=[], columns=theta_all.columns)
+    cols = [s + '_c' for s in hj]
+    theta_all_c = pd.DataFrame(data=[], columns=cols)
     for i in theta_all_c.columns:
-        theta_all_c[i] = dfs[i+'_c'] 
+        theta_all_c[i] = dfs[i] 
+
+    #drop nans at beginning
+    T = pd.concat((theta_all,theta_all_c),axis=1)
+    T.dropna(inplace=True)
+    theta_all = T[hj].copy()
+    theta_all_c = T[cols].copy()
     
     return hand, trunk, theta_all, theta_all_c
 
@@ -226,24 +235,31 @@ def plot_hand_orientation(df, s, task='RamR', cycle=1, fingers=None):
 
     plt.figure(figsize=(12,6))
     for i in fingers:
-        print('median confidence {} = {}'.format(i, theta_c[i].median()))
+        print('median confidence {} = {}'.format(i, theta_c[i+'_c'].median()))
+        theta_filt = lowpass(theta[i])
 
         try:
-            plt.plot(theta[i].index/30, signal.savgol_filter(theta[i].values, 9,2),'-', markersize=2, alpha=0.6)            
+            # plt.plot(theta[i].index/30, signal.savgol_filter(theta[i].values, 9,2),'-', markersize=2, alpha=0.6)
+            plt.plot(theta[i].index/30, theta_filt, '-', alpha=0.6)            
         except:
             plt.plot(theta[i].index/30, theta[i], '-', markersize=2, alpha=0.6)
             print('fit failed {}',i)
 
-        plt.scatter(theta[i].index/30, theta[i], s=12, c=theta_c[i], cmap='cool', vmin=0, vmax=1, alpha=0.6)
+        plt.scatter(theta[i].index/30, theta[i], s=12, c=theta_c[i+'_c'], cmap='cool', vmin=0, vmax=1, alpha=0.6)
 
     plt.legend(fingers)
     plt.grid() 
 
 
 #low pass filter data
-# def lowpass(x):
-    
-
+def lowpass(x, cutoff=3):
+    Fs = 30
+    x.interpolate()
+    # x.dropna(inplace=True)
+    cutoff_norm = cutoff/(0.5*Fs)
+    b,a = butter(4,cutoff_norm,btype='lowpass',analog=False)
+    xfilt = signal.filtfilt(b,a,x)
+    return xfilt
 
 
 #plot left and right joint trajectory after removing outliers and smoothing 
@@ -293,10 +309,12 @@ def plot_joint_trajectory(df, joint='wri', task='FtnR', subjs='All', cycle=1, si
 
             #filter 
             try:
-                data[jj+'filt'] = signal.savgol_filter(data[jj], 13, 2)
+                # data[jj+'filt'] = lowpass(data[jj])
+                data[jj+'filt'] = signal.savgol_filter(data[jj], 13, 3)
                 #Interpolate w Cubic spline instead
                 # cs = CubicSpline(t, data[jj])
                 # data[jj+'filt'] = cs(t)  
+                # data[jj+'filt'] = lowpass(data[jj+'filt'])
             except:
                 print('error fitting filter on ', s, jj, len(data[jj]))
                 data[jj+'filt'] = data[jj]
@@ -327,7 +345,13 @@ def plot_PSD(df, subj, jj, task, cycles, ax, col=None, alpha=0.5):
     for s, cycle in product(subj,cycles):
         dfs = df.query('SubjID == @s & Task==@task & cycle==@cycle').copy()
         if len(dfs)>0:
-            p=dist_from_ref(dfs,jj)
+
+            if 'Ftn' in task:
+                p=dist_from_ref(dfs,jj)
+            else:
+                _, _, theta, _ = handpose(dfs)
+                p = lowpass(theta['pinkyR'])
+
             f, Pxx_den = welch(p,fs=Fs,nperseg=min(len(p),512))
 
             if col is not None:
