@@ -11,6 +11,97 @@ from numpy.linalg import multi_dot
 import matplotlib.pyplot as plt
 
 
+def saveposes_s(datapath = Path('C:/openpose/output/') , subjs=None, posefile=None, tasks_to_process=None, outfile='Poses.csv'):
+
+    if posefile is None:
+        df = pd.DataFrame()
+    else: #append to existing poses dataframe
+        df = pd.read_csv(Path('../Metadata/'+posefile))
+        df.rename(columns={'Unnamed: 0':'frame#'}, inplace=True)
+        df.set_index(df['frame#'], inplace=True)
+        df.drop(['frame#'], axis=1, inplace=True)
+
+
+    if subjs is None:
+        subjs = os.listdir(datapath)
+    
+    for subj in subjs: #loop through subjects
+        filepath = datapath / subj
+        posefiles = os.listdir(filepath)
+        tasks = [p.split('_')[0] for p in posefiles]; cycles = [c.split('_')[1] for c in posefiles]
+        tc = pd.DataFrame({'Task':tasks, 'Cycle':cycles, 'file':posefiles})
+        if tasks_to_process is not None:
+            tc = tc.loc[tc.Task.isin(tasks_to_process)]
+            tc.reset_index(drop=True, inplace=True)
+
+        tasks = tc.Task.unique(); cycles = tc.Cycle.unique()
+        
+        for task in tasks:
+            for cycle in cycles:
+                print(subj, task, cycle)        
+                posefiles = glob.glob((filepath / (task+'_'+str(cycle))).as_posix()+'*')
+                posefiles = [Path(p) for p in posefiles] 
+                
+                if len(posefiles) > 0:
+                    print(posefiles[0])
+                
+                    for file in posefiles:
+                        with open(file) as f:
+                            try:
+                                data = json.load(f)
+                            except(UnicodeDecodeError):
+                                print('cannot parse ',str(file))
+
+                        person = 0 #for now use first person detected (need to be updated)
+                        
+                        #frame nr from filename
+                        str1 = file.as_posix()
+                        match = re.search(r'\d+_keypoints',str1)
+                        if match:                        
+                            frame_nr = int(re.findall('\d+',match.group())[0])
+                        else:
+                            print('missing frame')
+                            frame_nr = -1
+
+                        try:           
+                            pose = data['people'][person]['pose_keypoints_2d']
+                            pose_hand_L = data['people'][person]['hand_left_keypoints_2d']
+                            pose_hand_R = data['people'][person]['hand_right_keypoints_2d']
+                            d = {'SubjID':subj, 'Task':task, 'cycle':cycle,
+                                 'elbR_x':pose[9], 'elbR_y':pose[10], 'elbR_c':pose[11], 'wriR_x':pose[12], 'wriR_y':pose[13], 'wriR_c':pose[14], 
+                                 'elbL_x':pose[18], 'elbL_y':pose[19], 'elbL_c':pose[20], 'wriL_x':pose[21], 'wriL_y':pose[22], 'wriL_c':pose[23],
+                                 'nose_x':pose[0], 'nose_y':pose[1], 'nose_c':pose[2], 'neck_x':pose[3], 'neck_y':pose[4], 'neck_c':pose[5],
+                                 'midHip_x':pose[24], 'midHip_y':pose[25], 'midHip_c':pose[26],
+                                 'thumbR_x':pose_hand_R[12], 'thumbR_y':pose_hand_R[13], 'thumbR_c':pose_hand_R[14],
+                                 'indexR_x':pose_hand_R[24], 'indexR_y':pose_hand_R[25], 'indexR_c':pose_hand_R[26],
+                                 'midR_x':pose_hand_R[36], 'midR_y':pose_hand_R[37], 'midR_c':pose_hand_R[38],
+                                 'ringR_x':pose_hand_R[48], 'ringR_y':pose_hand_R[49], 'ringR_c':pose_hand_R[50],
+                                 'pinkyR_x':pose_hand_R[60], 'pinkyR_y':pose_hand_R[61], 'pinkyR_c':pose_hand_R[62],                         
+                                 'thumbL_x':pose_hand_L[12], 'thumbL_y':pose_hand_L[13], 'thumbL_c':pose_hand_L[14],
+                                 'indexL_x':pose_hand_L[24], 'indexL_y':pose_hand_L[25], 'indexL_c':pose_hand_L[26],
+                                 'midL_x':pose_hand_L[36], 'midL_y':pose_hand_L[37], 'midL_c':pose_hand_L[38],                         
+                                 'ringL_x':pose_hand_L[48], 'ringL_y':pose_hand_L[49], 'ringL_c':pose_hand_L[50],
+                                 'pinkyL_x':pose_hand_L[60], 'pinkyL_y':pose_hand_L[61], 'pinkyL_c':pose_hand_L[62],
+                                 'Npeople':len(data['people'])
+                        }
+                            df = pd.concat((df,pd.DataFrame(d, index=[frame_nr])))
+
+                        except(IndexError):
+                            print('No pose data found in frame {}'.format(frame_nr))
+                            continue
+
+                else:
+                    print('No pose files found')
+                    
+    df['SubjID']=df.SubjID.astype(int)
+    df['cycle']=df.cycle.astype(int)
+
+    #save data
+    df.to_csv('../Metadata/'+outfile, index=True)
+    # df.to_csv('../Metadata/Poses.csv',index=True)
+    return df
+
+
 #Load all posefiles and save poses into a dataframe
 def saveposes(datapath = Path('C:/openpose/output/') ):
 
@@ -160,6 +251,7 @@ def dist_from_ref(dfs, jj):
     return pfilt
 
 
+#
 def handpose(dfs):
     data = dfs.copy()
 
@@ -186,25 +278,27 @@ def handpose(dfs):
     hand = hand.apply(removeOutliers,args=(2,False,True))
 
     #thumb to other finger vector and angle relative to trunk vector
-    # hj = ['indexR','midR','ringR','pinkyR']
-    # theta_all = pd.DataFrame(data=[], columns=hj)
-    # for jj in hj:
-    #     hR = pd.DataFrame({'x':hand.thumbR_x - hand[jj+'_x'], 'y':hand.thumbR_y - hand[jj+'_y']})
-    #     hR = hR.apply(removeOutliers, args=(2,False,True))
-    #     #angle between hand vector (thumb-pinky) and trunk vector
-    #     dp, theta = dotprod_df(trunk, hR)
-    #     theta_all[jj] = theta.interpolate()
-
-    #vector from index to others
-    hj = ['midR','ringR','pinkyR']
+    hj = ['indexR','midR','ringR','pinkyR']
     theta_all = pd.DataFrame(data=[], columns=hj)
     for jj in hj:
-        hR = pd.DataFrame({'x':hand.indexR_x - hand[jj+'_x'], 'y':hand.indexR_y - hand[jj+'_y']})
+        hR = pd.DataFrame({'x':hand.thumbR_x - hand[jj+'_x'], 'y':hand.thumbR_y - hand[jj+'_y']})
         hR = hR.apply(removeOutliers, args=(2,False,True))
         #angle between hand vector (thumb-pinky) and trunk vector
         dp, theta = dotprod_df(trunk, hR)
         theta_all[jj] = theta.interpolate()
     theta_all.apply(removeOutliers, args=(2,False,True))
+
+
+    #vector from index to others
+    # hj = ['midR','ringR','pinkyR']
+    # theta_all = pd.DataFrame(data=[], columns=hj)
+    # for jj in hj:
+    #     hR = pd.DataFrame({'x':hand.indexR_x - hand[jj+'_x'], 'y':hand.indexR_y - hand[jj+'_y']})
+    #     hR = hR.apply(removeOutliers, args=(2,False,True))
+    #     #angle between hand vector (thumb-pinky) and trunk vector
+    #     dp, theta = dotprod_df(trunk, hR)
+    #     theta_all[jj] = theta.interpolate()
+    # theta_all.apply(removeOutliers, args=(2,False,True))
 
 
     #confidence values for each finger
@@ -220,6 +314,36 @@ def handpose(dfs):
     theta_all_c = T[cols].copy()
     
     return hand, trunk, theta_all, theta_all_c
+
+
+#distance of each fingertip from a body landmark 
+def hand_tremor(df, s, task='Sitng', cycle=1):
+
+    data = df.query('SubjID == @s & Task==@task & cycle==@cycle').copy()    
+    joints = ['thumbR_','indexR_', 'pinkyR_','thumbL_','indexL_', 'pinkyL_', 'neck_']
+    joints_xy = []
+    xs = ['x','y']
+    for jj in product(joints,xs):
+        joints_xy.append(''.join(jj))
+    
+    print(joints_xy)
+    data = data[joints_xy]
+    #interpolate thru missing detections, remove outliers and interpolate again
+    data[data==0] = np.nan
+    data = data.interpolate()
+    data.apply(removeOutliers, args=(2, False, True))
+
+    #hand poses (interpolate points for missing detections)
+    joints = ['thumbR_','indexR_', 'pinkyR_','thumbL_','indexL_', 'pinkyL_']
+    hand = pd.DataFrame(data=[], columns=joints)
+    
+    #distance of each joint from ref point
+    for jj in joints:
+        d = np.sqrt( (data[jj+'x'] - data.neck_x)**2 + (data[jj+'y'] - data.neck_y)**2 )
+        hand[jj] = d
+
+    hand = hand.apply(removeOutliers, args=(2,False,True))
+    return hand
 
 
 
@@ -239,7 +363,7 @@ def plot_hand_orientation(df, s, task='RamR', cycle=1, fingers=None):
         theta_filt = lowpass(theta[i])
 
         try:
-            # plt.plot(theta[i].index/30, signal.savgol_filter(theta[i].values, 9,2),'-', markersize=2, alpha=0.6)
+            # plt.plot(theta[i].index/30, signal.savgol_filter(theta[i].values, 9,3),'-', markersize=2, alpha=0.6)
             plt.plot(theta[i].index/30, theta_filt, '-', alpha=0.6)            
         except:
             plt.plot(theta[i].index/30, theta[i], '-', markersize=2, alpha=0.6)
@@ -261,6 +385,13 @@ def lowpass(x, cutoff=3):
     xfilt = signal.filtfilt(b,a,x)
     return xfilt
 
+def bandpass(x, cutoff=[2,7]):
+    Fs = 30
+    x.interpolate()
+    cutoff_norm = [c / (0.5 * Fs) for c in cutoff]
+    b,a = butter(4, cutoff_norm, btype='bandpass', analog=False)
+    xfilt = signal.filtfilt(b,a,x)
+    return xfilt
 
 #plot left and right joint trajectory after removing outliers and smoothing 
 def plot_joint_trajectory(df, joint='wri', task='FtnR', subjs='All', cycle=1, size=8, colormap=False, zscore=True):
