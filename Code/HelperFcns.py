@@ -326,7 +326,6 @@ def hand_tremor(df, s, task='Sitng', cycle=1):
     for jj in product(joints,xs):
         joints_xy.append(''.join(jj))
     
-    print(joints_xy)
     data = data[joints_xy]
     #interpolate thru missing detections, remove outliers and interpolate again
     data[data==0] = np.nan
@@ -495,6 +494,91 @@ def plot_PSD(df, subj, jj, task, cycles, ax, col=None, alpha=0.5):
     ax[0].grid(); ax[1].grid(); ax[1].set_xlim([-0.5,6])
     ax[1].legend(legend_sc)
     plt.show()
+
+
+#compute features on input (time) series
+#outputs array with feature values
+def compute_features(x, idx=0, Fs=30):
+        
+        #peak power freq
+        f, Pxx_den = welch(x, fs=Fs, nperseg=min(len(x),512))
+        # print(max(f), max(Pxx_den), sum(Pxx_den))
+        F_dom = f[Pxx_den.argmax()]
+
+        #power at peak freq over tot power
+        F_dom_ratio = max(Pxx_den)/sum(Pxx_den)
+
+        #Range of signal amplitude
+        Range = x.max() - x.min()
+
+        #RMS (or std dev of signal)
+        RMS = np.sqrt((x**2).sum() / len(x))
+
+        f = {'F_dom':F_dom, 'F_dom_ratio':F_dom_ratio, 'Range':Range, 'RMS':RMS}
+
+        return(pd.DataFrame(f, index=[idx]))
+
+
+
+
+#input data frame with hand joint distances from ref point 
+def compute_features_hand(hand_df, winlen=3, joint=None):
+
+    Fs = 30 #sampling rate
+    flist = ['F_dom', 'F_dom_ratio', 'Range', 'RMS']
+    
+    #compute features for all joints unless specified
+    if joint is not None:
+        jj = [joint+'R_', joint+'L_']
+        hand_df = hand_df[jj]
+
+    #initialize dictionary with features for each hand joint
+    F_R = pd.DataFrame(data=[], columns=flist)
+    F_L = F_R.copy()
+
+    #band pass data (for tremor detection)
+    handbp = hand_df.apply(bandpass).copy()
+    handbp.index = handbp.index / Fs
+    T = handbp.index[-1] #signal duration
+    times = np.arange(0, T, winlen)
+    t1 = times[:-1]
+    t2 = times[1:]
+    times = zip(t1,t2)
+
+    #aggregate features across all hand joints
+    #compute features on each window
+    idx = 0
+    for ts, te in times:
+        idx+=1
+        dft = handbp[ts:te].copy()
+ 
+        #compute features on each L joint
+        for jj in [i for i in dft.columns if 'L_' in i]:
+            dft_j = dft[jj].copy()
+            f = compute_features(dft_j, idx)
+            F_L = pd.concat((F_L, f), axis=0)
+
+        #compute features on each R joint
+        for jj in [i for i in dft.columns if 'R_' in i]:
+            dft_j = dft[jj].copy()
+            f = compute_features(dft_j, idx)
+            F_R = pd.concat((F_R, f), axis=0)
+
+    return F_L, F_R
+
+
+
+
+
+
+            
+
+
+
+
+    
+
+    #
 
 
 
