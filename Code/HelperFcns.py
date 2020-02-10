@@ -24,7 +24,7 @@ def saveposes_s(datapath = Path('C:/openpose/output/') , subjs=None, posefile=No
 
     if subjs is None:
         subjs = os.listdir(datapath)
-    
+
     for subj in subjs: #loop through subjects
         filepath = datapath / subj
         posefiles = os.listdir(filepath)
@@ -35,16 +35,16 @@ def saveposes_s(datapath = Path('C:/openpose/output/') , subjs=None, posefile=No
             tc.reset_index(drop=True, inplace=True)
 
         tasks = tc.Task.unique(); cycles = tc.Cycle.unique()
-        
+
         for task in tasks:
             for cycle in cycles:
-                print(subj, task, cycle)        
+                print(subj, task, cycle)
                 posefiles = glob.glob((filepath / (task+'_'+str(cycle))).as_posix()+'*')
-                posefiles = [Path(p) for p in posefiles] 
-                
+                posefiles = [Path(p) for p in posefiles]
+
                 if len(posefiles) > 0:
                     print(posefiles[0])
-                
+
                     for file in posefiles:
                         with open(file) as f:
                             try:
@@ -53,22 +53,22 @@ def saveposes_s(datapath = Path('C:/openpose/output/') , subjs=None, posefile=No
                                 print('cannot parse ',str(file))
 
                         person = 0 #for now use first person detected (need to be updated)
-                        
+
                         #frame nr from filename
                         str1 = file.as_posix()
                         match = re.search(r'\d+_keypoints',str1)
-                        if match:                        
+                        if match:
                             frame_nr = int(re.findall('\d+',match.group())[0])
                         else:
                             print('missing frame')
                             frame_nr = -1
 
-                        try:           
+                        try:
                             pose = data['people'][person]['pose_keypoints_2d']
                             pose_hand_L = data['people'][person]['hand_left_keypoints_2d']
                             pose_hand_R = data['people'][person]['hand_right_keypoints_2d']
                             d = {'SubjID':subj, 'Task':task, 'cycle':cycle,
-                                 'elbR_x':pose[9], 'elbR_y':pose[10], 'elbR_c':pose[11], 'wriR_x':pose[12], 'wriR_y':pose[13], 'wriR_c':pose[14], 
+                                 'elbR_x':pose[9], 'elbR_y':pose[10], 'elbR_c':pose[11], 'wriR_x':pose[12], 'wriR_y':pose[13], 'wriR_c':pose[14],
                                  'elbL_x':pose[18], 'elbL_y':pose[19], 'elbL_c':pose[20], 'wriL_x':pose[21], 'wriL_y':pose[22], 'wriL_c':pose[23],
                                  'nose_x':pose[0], 'nose_y':pose[1], 'nose_c':pose[2], 'neck_x':pose[3], 'neck_y':pose[4], 'neck_c':pose[5],
                                  'midHip_x':pose[24], 'midHip_y':pose[25], 'midHip_c':pose[26],
@@ -76,10 +76,10 @@ def saveposes_s(datapath = Path('C:/openpose/output/') , subjs=None, posefile=No
                                  'indexR_x':pose_hand_R[24], 'indexR_y':pose_hand_R[25], 'indexR_c':pose_hand_R[26],
                                  'midR_x':pose_hand_R[36], 'midR_y':pose_hand_R[37], 'midR_c':pose_hand_R[38],
                                  'ringR_x':pose_hand_R[48], 'ringR_y':pose_hand_R[49], 'ringR_c':pose_hand_R[50],
-                                 'pinkyR_x':pose_hand_R[60], 'pinkyR_y':pose_hand_R[61], 'pinkyR_c':pose_hand_R[62],                         
+                                 'pinkyR_x':pose_hand_R[60], 'pinkyR_y':pose_hand_R[61], 'pinkyR_c':pose_hand_R[62],
                                  'thumbL_x':pose_hand_L[12], 'thumbL_y':pose_hand_L[13], 'thumbL_c':pose_hand_L[14],
                                  'indexL_x':pose_hand_L[24], 'indexL_y':pose_hand_L[25], 'indexL_c':pose_hand_L[26],
-                                 'midL_x':pose_hand_L[36], 'midL_y':pose_hand_L[37], 'midL_c':pose_hand_L[38],                         
+                                 'midL_x':pose_hand_L[36], 'midL_y':pose_hand_L[37], 'midL_c':pose_hand_L[38],
                                  'ringL_x':pose_hand_L[48], 'ringL_y':pose_hand_L[49], 'ringL_c':pose_hand_L[50],
                                  'pinkyL_x':pose_hand_L[60], 'pinkyL_y':pose_hand_L[61], 'pinkyL_c':pose_hand_L[62],
                                  'Npeople':len(data['people'])
@@ -92,7 +92,7 @@ def saveposes_s(datapath = Path('C:/openpose/output/') , subjs=None, posefile=No
 
                 else:
                     print('No pose files found')
-                    
+
     df['SubjID']=df.SubjID.astype(int)
     df['cycle']=df.cycle.astype(int)
 
@@ -113,16 +113,16 @@ def saveposes(datapath = Path('C:/openpose/output/') ):
         tasks = [p.split('_')[0] for p in posefiles]; cycles = [c.split('_')[1] for c in posefiles]
         tasks = np.unique(tasks); cycles = np.unique(cycles)
     #     print(subj, tasks, cycles)
-        
+
         for task in tasks:
             for cycle in cycles:
-                print(subj, task, cycle)        
+                print(subj, task, cycle)
                 posefiles = glob.glob((filepath / (task+'_'+str(cycle))).as_posix()+'*')
-                posefiles = [Path(p) for p in posefiles] 
-                
+                posefiles = [Path(p) for p in posefiles]
+
                 if len(posefiles) > 0:
                     print(posefiles[0])
-                
+
                     for file in posefiles:
                         with open(file) as f:
                             try:
@@ -131,22 +131,22 @@ def saveposes(datapath = Path('C:/openpose/output/') ):
                                 print('cannot parse ',str(file))
 
                         person = 0 #for now use first person detected (need to be updated)
-                        
+
                         #frame nr from filename
                         str1 = file.as_posix()
                         match = re.search(r'\d+_keypoints',str1)
-                        if match:                        
+                        if match:
                             frame_nr = int(re.findall('\d+',match.group())[0])
                         else:
                             print('missing frame')
                             frame_nr = -1
 
-                        try:           
+                        try:
                             pose = data['people'][person]['pose_keypoints_2d']
                             pose_hand_L = data['people'][person]['hand_left_keypoints_2d']
                             pose_hand_R = data['people'][person]['hand_right_keypoints_2d']
                             d = {'SubjID':subj, 'Task':task, 'cycle':cycle,
-                                 'elbR_x':pose[9], 'elbR_y':pose[10], 'elbR_c':pose[11], 'wriR_x':pose[12], 'wriR_y':pose[13], 'wriR_c':pose[14], 
+                                 'elbR_x':pose[9], 'elbR_y':pose[10], 'elbR_c':pose[11], 'wriR_x':pose[12], 'wriR_y':pose[13], 'wriR_c':pose[14],
                                  'elbL_x':pose[18], 'elbL_y':pose[19], 'elbL_c':pose[20], 'wriL_x':pose[21], 'wriL_y':pose[22], 'wriL_c':pose[23],
                                  'nose_x':pose[0], 'nose_y':pose[1], 'nose_c':pose[2], 'neck_x':pose[3], 'neck_y':pose[4], 'neck_c':pose[5],
                                  'midHip_x':pose[24], 'midHip_y':pose[25], 'midHip_c':pose[26],
@@ -154,10 +154,10 @@ def saveposes(datapath = Path('C:/openpose/output/') ):
                                  'indexR_x':pose_hand_R[24], 'indexR_y':pose_hand_R[25], 'indexR_c':pose_hand_R[26],
                                  'midR_x':pose_hand_R[36], 'midR_y':pose_hand_R[37], 'midR_c':pose_hand_R[38],
                                  'ringR_x':pose_hand_R[48], 'ringR_y':pose_hand_R[49], 'ringR_c':pose_hand_R[50],
-                                 'pinkyR_x':pose_hand_R[60], 'pinkyR_y':pose_hand_R[61], 'pinkyR_c':pose_hand_R[62],                         
+                                 'pinkyR_x':pose_hand_R[60], 'pinkyR_y':pose_hand_R[61], 'pinkyR_c':pose_hand_R[62],
                                  'thumbL_x':pose_hand_L[12], 'thumbL_y':pose_hand_L[13], 'thumbL_c':pose_hand_L[14],
                                  'indexL_x':pose_hand_L[24], 'indexL_y':pose_hand_L[25], 'indexL_c':pose_hand_L[26],
-                                 'midL_x':pose_hand_L[36], 'midL_y':pose_hand_L[37], 'midL_c':pose_hand_L[38],                         
+                                 'midL_x':pose_hand_L[36], 'midL_y':pose_hand_L[37], 'midL_c':pose_hand_L[38],
                                  'ringL_x':pose_hand_L[48], 'ringL_y':pose_hand_L[49], 'ringL_c':pose_hand_L[50],
                                  'pinkyL_x':pose_hand_L[60], 'pinkyL_y':pose_hand_L[61], 'pinkyL_c':pose_hand_L[62],
                                  'Npeople':len(data['people'])
@@ -170,7 +170,7 @@ def saveposes(datapath = Path('C:/openpose/output/') ):
 
                 else:
                     print('No pose files found')
-                    
+
     df['SubjID']=df.SubjID.astype(int)
     df['cycle']=df.cycle.astype(int)
 
@@ -219,7 +219,7 @@ def removeOutliers(S, n_std=2, returnZ=True, interp=True):
     else:
         return S[np.abs(Sz) <= n_std]
 
-    
+
 
 #compute distance (scalar) of a joint from ref point (nose) normalized by body segment length (trunk)
 #remove outliers above 2std deviations
@@ -255,11 +255,11 @@ def dist_from_ref(dfs, jj):
 def handpose(dfs):
     data = dfs.copy()
 
-    #trunk vector 
+    #trunk vector
     # trunk = pd.DataFrame({'x':data.midHip_x -data.neck_x, 'y':data.midHip_y-data.neck_y})
     trunk = pd.DataFrame({'x':data.neck_x -data.midHip_x, 'y':data.neck_y-data.midHip_y})
     trunk = trunk.apply(removeOutliers, args=(2,False,True))
-    
+
     #hand poses (interpolate points for missing detections)
     hand = pd.DataFrame()
     joints = ['thumbR_','indexR_', 'midR_', 'ringR_', 'pinkyR_']
@@ -305,44 +305,15 @@ def handpose(dfs):
     cols = [s + '_c' for s in hj]
     theta_all_c = pd.DataFrame(data=[], columns=cols)
     for i in theta_all_c.columns:
-        theta_all_c[i] = dfs[i] 
+        theta_all_c[i] = dfs[i]
 
     #drop nans at beginning
     T = pd.concat((theta_all,theta_all_c),axis=1)
     T.dropna(inplace=True)
     theta_all = T[hj].copy()
     theta_all_c = T[cols].copy()
-    
+
     return hand, trunk, theta_all, theta_all_c
-
-
-#distance of each fingertip from a body landmark 
-def hand_tremor(df, s, task='Sitng', cycle=1):
-
-    data = df.query('SubjID == @s & Task==@task & cycle==@cycle').copy()    
-    joints = ['thumbR_','indexR_', 'pinkyR_','thumbL_','indexL_', 'pinkyL_', 'neck_']
-    joints_xy = []
-    xs = ['x','y']
-    for jj in product(joints,xs):
-        joints_xy.append(''.join(jj))
-    
-    data = data[joints_xy]
-    #interpolate thru missing detections, remove outliers and interpolate again
-    data[data==0] = np.nan
-    data = data.interpolate()
-    data.apply(removeOutliers, args=(2, False, True))
-
-    #hand poses (interpolate points for missing detections)
-    joints = ['thumbR_','indexR_', 'pinkyR_','thumbL_','indexL_', 'pinkyL_']
-    hand = pd.DataFrame(data=[], columns=joints)
-    
-    #distance of each joint from ref point
-    for jj in joints:
-        d = np.sqrt( (data[jj+'x'] - data.neck_x)**2 + (data[jj+'y'] - data.neck_y)**2 )
-        hand[jj] = d
-
-    hand = hand.apply(removeOutliers, args=(2,False,True))
-    return hand
 
 
 
@@ -350,7 +321,7 @@ def plot_hand_orientation(df, s, task='RamR', cycle=1, fingers=None):
 
     # s = 1043
     # task = 'RamR'
-    dfs = df.query('SubjID == @s & Task==@task & cycle==@cycle').copy()    
+    dfs = df.query('SubjID == @s & Task==@task & cycle==@cycle').copy()
     hand, trunk, theta, theta_c = handpose(dfs)
 
     if fingers is None:
@@ -363,7 +334,7 @@ def plot_hand_orientation(df, s, task='RamR', cycle=1, fingers=None):
 
         try:
             # plt.plot(theta[i].index/30, signal.savgol_filter(theta[i].values, 9,3),'-', markersize=2, alpha=0.6)
-            plt.plot(theta[i].index/30, theta_filt, '-', alpha=0.6)            
+            plt.plot(theta[i].index/30, theta_filt, '-', alpha=0.6)
         except:
             plt.plot(theta[i].index/30, theta[i], '-', markersize=2, alpha=0.6)
             print('fit failed {}',i)
@@ -371,65 +342,47 @@ def plot_hand_orientation(df, s, task='RamR', cycle=1, fingers=None):
         plt.scatter(theta[i].index/30, theta[i], s=12, c=theta_c[i+'_c'], cmap='cool', vmin=0, vmax=1, alpha=0.6)
 
     plt.legend(fingers)
-    plt.grid() 
+    plt.grid()
 
 
-#low pass filter data
-def lowpass(x, cutoff=3):
-    Fs = 30
-    x.interpolate()
-    # x.dropna(inplace=True)
-    cutoff_norm = cutoff/(0.5*Fs)
-    b,a = butter(4,cutoff_norm,btype='lowpass',analog=False)
-    xfilt = signal.filtfilt(b,a,x)
-    return xfilt
-
-def bandpass(x, cutoff=[2,7]):
-    Fs = 30
-    x.interpolate()
-    cutoff_norm = [c / (0.5 * Fs) for c in cutoff]
-    b,a = butter(4, cutoff_norm, btype='bandpass', analog=False)
-    xfilt = signal.filtfilt(b,a,x)
-    return xfilt
-
-#plot left and right joint trajectory after removing outliers and smoothing 
+#plot left and right joint trajectory after removing outliers and smoothing
 def plot_joint_trajectory(df, joint='wri', task='FtnR', subjs='All', cycle=1, size=8, colormap=False, zscore=True):
-    
+
     markers = ('o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X')
     # joints = ['wriL_', 'wriR_', 'thumbL_', 'thumbR_','indexL_', 'indexR_',]
     joints = [joint+'L_', joint+'R_']
     frame_rate = 30 #pretty much the same across movies
-    
+
     T = 20 #end plot time [s]
-        
+
     if subjs == 'All':
         subjs = df.SubjID.unique()
-        
+
     fig, ax = plt.subplots(1,2, sharex=True, sharey=True, figsize=(12,6))
     ax = ax.ravel()
-    
+
     for si, s in enumerate(subjs):
 
-        dfs = df.query('SubjID == @s & Task==@task & cycle==@cycle').copy()    
+        dfs = df.query('SubjID == @s & Task==@task & cycle==@cycle').copy()
         dfs = dfs[:int(T*frame_rate)]
-        
+
         if dfs.empty:
             print('no data found for {}, {}, cycle {}'.format(s, task, cycle))
             continue
-                
+
         for i, jj in enumerate(joints):
-            
+
             data = dfs.copy()
             #remove missed detections (0s in both coords) for current joint
             data = data[ (data[jj+'x'] > 0) & (data[jj+'y'] > 0)]
-            
-            #normalization factor (hip length)    
-            L = (np.sqrt( (data.midHip_x -data.neck_x)**2 + (data.midHip_y-data.neck_y)**2) ) #trunk length (ref length)            
+
+            #normalization factor (hip length)
+            L = (np.sqrt( (data.midHip_x -data.neck_x)**2 + (data.midHip_y-data.neck_y)**2) ) #trunk length (ref length)
             L = removeOutliers(L, 2, returnZ=False) #remove outliers and linearly interpolate missing points (need to reject if not enough points)
-                        
+
             #Detrend data: distance from nose (ref point) normalized by trunk length
-            p = (np.sqrt((data[jj+'x'] - data.neck_x)**2 + (data[jj+'y'] - data.neck_y)**2))/L 
-            data[jj] = p 
+            p = (np.sqrt((data[jj+'x'] - data.neck_x)**2 + (data[jj+'y'] - data.neck_y)**2))/L
+            data[jj] = p
 
             #outlier rejection
             data[jj] = removeOutliers(data[jj],2, returnZ=zscore, interp=False) #remove outliers - do not interpolate
@@ -437,34 +390,34 @@ def plot_joint_trajectory(df, joint='wri', task='FtnR', subjs='All', cycle=1, si
 
             t = data.index/frame_rate
 
-            #filter 
+            #filter
             try:
                 # data[jj+'filt'] = lowpass(data[jj])
                 data[jj+'filt'] = signal.savgol_filter(data[jj], 13, 3)
                 #Interpolate w Cubic spline instead
                 # cs = CubicSpline(t, data[jj])
-                # data[jj+'filt'] = cs(t)  
+                # data[jj+'filt'] = cs(t)
                 # data[jj+'filt'] = lowpass(data[jj+'filt'])
             except:
                 print('error fitting filter on ', s, jj, len(data[jj]))
                 data[jj+'filt'] = data[jj]
-                        
+
             if colormap == False:
-                ax[i].scatter(t, data[jj], s=size, alpha=0.6); 
+                ax[i].scatter(t, data[jj], s=size, alpha=0.6);
 #                 ax[i].plot(t, data[jj], LineWidth=.5)
                 ax[i].plot(t, data[jj+'filt'], LineWidth=2, alpha=0.6)
             else:
-                ax[i].scatter(t, data[jj], s=size, alpha=0.6, c=data[jj+'c'], cmap='cool', marker=markers[si], vmin=0, vmax=1); 
+                ax[i].scatter(t, data[jj], s=size, alpha=0.6, c=data[jj+'c'], cmap='cool', marker=markers[si], vmin=0, vmax=1);
 #                 ax[i].plot(t, data[jj], LineWidth=.5)
                 ax[i].plot(t, data[jj+'filt'], LineWidth=2, alpha=0.6)
-                
+
             ax[i].set_title(jj+task+str(cycle))
-            
-                    
+
+
     for i in range(len(joints)):
         ax[i].grid()
         ax[i].legend(subjs)
-        
+
 
 
 #plot PSD of univariate data
@@ -496,10 +449,46 @@ def plot_PSD(df, subj, jj, task, cycles, ax, col=None, alpha=0.5):
     plt.show()
 
 
+#distance of each fingertip from a body landmark
+def hand_tremor(df, s, task='Sitng', cycle=1):
+
+    data = df.query('SubjID == @s & Task==@task & cycle==@cycle').copy()
+    #normalization factor (hip length)
+    L = (np.sqrt( (data.midHip_x -data.neck_x)**2 + (data.midHip_y-data.neck_y)**2) ) #trunk length (ref length)
+    L = removeOutliers(L, 2, returnZ=False, interp=True) #remove outliers and linearly interpolate
+    L = np.nanmedian(L) #trunk length should be approx constant 
+
+    joints = ['thumbR_','indexR_', 'pinkyR_','thumbL_','indexL_', 'pinkyL_', 'neck_']
+    joints_xy = []
+    xs = ['x','y']
+    for jj in product(joints,xs):
+        joints_xy.append(''.join(jj))
+
+    data = data[joints_xy]
+    #interpolate thru missing detections, remove outliers and interpolate again
+    data[data==0] = np.nan
+    data = data.interpolate()
+    data.apply(removeOutliers, args=(2, False, True))
+
+    #distance of each joint from ref point
+    joints = ['thumbR_','indexR_', 'pinkyR_','thumbL_','indexL_', 'pinkyL_']
+    hand = pd.DataFrame(data=[], columns=joints)
+    for jj in joints:
+        d = np.sqrt( (data[jj+'x'] - data.neck_x)**2 + (data[jj+'y'] - data.neck_y)**2 ) #/ (L*0.1)
+        hand[jj] = d
+
+    hand = hand.apply(removeOutliers, args=(2,False,True))
+    # hand.dropna(inplace=True)
+    return hand
+
+
 #compute features on input (time) series
 #outputs array with feature values
 def compute_features(x, idx=0, Fs=30):
-        
+
+        # if  sum(x.isna())/len(x) > 0.5:
+        #     return 0
+
         #peak power freq
         f, Pxx_den = welch(x, fs=Fs, nperseg=min(len(x),512))
         # print(max(f), max(Pxx_den), sum(Pxx_den))
@@ -519,14 +508,12 @@ def compute_features(x, idx=0, Fs=30):
         return(pd.DataFrame(f, index=[idx]))
 
 
-
-
-#input data frame with hand joint distances from ref point 
+#input data frame with hand joint distances from ref point
 def compute_features_hand(hand_df, winlen=3, joint=None):
 
     Fs = 30 #sampling rate
     flist = ['F_dom', 'F_dom_ratio', 'Range', 'RMS']
-    
+
     #compute features for all joints unless specified
     if joint is not None:
         jj = [joint+'R_', joint+'L_']
@@ -551,7 +538,7 @@ def compute_features_hand(hand_df, winlen=3, joint=None):
     for ts, te in times:
         idx+=1
         dft = handbp[ts:te].copy()
- 
+
         #compute features on each L joint
         for jj in [i for i in dft.columns if 'L_' in i]:
             dft_j = dft[jj].copy()
@@ -564,25 +551,32 @@ def compute_features_hand(hand_df, winlen=3, joint=None):
             f = compute_features(dft_j, idx)
             F_R = pd.concat((F_R, f), axis=0)
 
+        #***can add cross correlation across hands as additional feature***
+
     return F_L, F_R
 
 
+#low pass filter data
+def lowpass(x, cutoff=3, Fs=30):
 
+    x.interpolate()
+    # x.dropna(inplace=True)
+    cutoff_norm = cutoff/(0.5*Fs)
+    b,a = butter(4,cutoff_norm,btype='lowpass',analog=False)
+    xfilt = signal.filtfilt(b,a,x)
+    return xfilt
 
+def bandpass(x, cutoff=[2,7], Fs=30):
 
+    x.interpolate()  #interpolate if nan
+    xfilt = x.copy() #keep a copy to deal with nans at beginning and return array of same size as x
+    x.dropna(inplace=True)
+    cutoff_norm = [c / (0.5 * Fs) for c in cutoff]
+    b,a = butter(4, cutoff_norm, btype='bandpass', analog=False)
+    xfilt_ = signal.filtfilt(b,a,x)
+    xfilt[~xfilt.isna()]=xfilt_
 
-            
-
-
-
-
-    
-
-    #
-
-
-
-
+    return xfilt
 
 
 
