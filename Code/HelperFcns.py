@@ -4,6 +4,7 @@ import os, glob
 import re, json
 from pathlib import Path
 from scipy import stats, signal
+from scipy.stats import skew, kurtosis, entropy
 from scipy.signal import welch, butter
 from scipy.interpolate import CubicSpline
 from itertools import product
@@ -221,34 +222,6 @@ def removeOutliers(S, n_std=2, returnZ=True, interp=True):
 
 
 
-#compute distance (scalar) of a joint from ref point (nose) normalized by body segment length (trunk)
-#remove outliers above 2std deviations
-#dfs is the dataframe with all joint positions (poses)
-#jj is the joint to compute distance
-#returns a Series with index and joint distance (eg wriR_), Remember to add _ at the end
-def dist_from_ref(dfs, jj):
-    data = dfs.copy()
-    #remove missed detections (0s in both coords) for current joint (maybe change with nans)
-    data = data[ (data[jj+'x'] > 0) & (data[jj+'y'] > 0)]
-
-    #normalization factor (hip length)
-    L = (np.sqrt( (data.midHip_x -data.neck_x)**2 + (data.midHip_y-data.neck_y)**2) ) #trunk length (ref length)
-    L = removeOutliers(L, 2, returnZ=False, interp=True) #remove outliers and linearly interpolate
-
-    #Detrend data: distance from nose (ref point) normalized by trunk length
-    p = (np.sqrt((data[jj+'x'] - data.nose_x)**2 + (data[jj+'y'] - data.nose_y)**2))/L
-
-    #outlier rejection and z-score
-    pclean = removeOutliers(p, 2, returnZ=True, interp=False)
-    #smooth data
-    try:
-        pfilt =  pd.Series(index=pclean.index, data=signal.savgol_filter(pclean, 13, 2))
-    except:
-        print('filter fitting failed - not filtering data')
-        pfilt = pclean.copy()
-
-    # data.dropna(inplace=True)
-    return pfilt
 
 
 #
@@ -373,15 +346,23 @@ def plot_joint_trajectory(df, joint='wri', task='FtnR', subjs='All', cycle=1, si
         for i, jj in enumerate(joints):
 
             data = dfs.copy()
-            #remove missed detections (0s in both coords) for current joint
-            data = data[ (data[jj+'x'] > 0) & (data[jj+'y'] > 0)]
+            data.loc[data[jj+'x'] == 0, jj+'x'] = np.nan
+            data.loc[data[jj+'y'] == 0, jj+'y'] = np.nan
+            # if sum(data[[jj+'x',jj+'y'].isna())
+            #linearly interpolate thru missing detections
+            # data[jj+'x'].interpolate(inplace=True)
+            # data[jj+'y'].interpolate(inplace=True)
 
             #normalization factor (hip length)
             L = (np.sqrt( (data.midHip_x -data.neck_x)**2 + (data.midHip_y-data.neck_y)**2) ) #trunk length (ref length)
             L = removeOutliers(L, 2, returnZ=False) #remove outliers and linearly interpolate missing points (need to reject if not enough points)
+            # L = np.nanmedian(L) #assume person is not moving away from camera 
 
             #Detrend data: distance from nose (ref point) normalized by trunk length
-            p = (np.sqrt((data[jj+'x'] - data.neck_x)**2 + (data[jj+'y'] - data.neck_y)**2))/L
+            # data[['nose_x','nose_y']] = data[['nose_x','nose_y']].apply(removeOutliers, args=(2, False, True))
+            p = (np.sqrt((data[jj+'x'] - data.neck_x)**2 + (data[jj+'y'] - data.neck_y)**2)) / L
+            # p = (np.sqrt((data[jj+'x'] - data.nose_x)**2 + (data[jj+'y'] - data.nose_y)**2)) / L
+
             data[jj] = p
 
             #outlier rejection
@@ -390,9 +371,14 @@ def plot_joint_trajectory(df, joint='wri', task='FtnR', subjs='All', cycle=1, si
 
             t = data.index/frame_rate
 
+            #HP filter
+            data[jj] = bandpass(data[jj], cutoff=[.25,10])
+
             #filter
             try:
+                # data[jj+'filt'] = bandpass(data[jj], cutoff=[.5,3])
                 # data[jj+'filt'] = lowpass(data[jj])
+                # data[jj+'filt'] = bandpass(data[jj], cutoff=[.5,3])
                 data[jj+'filt'] = signal.savgol_filter(data[jj], 13, 3)
                 #Interpolate w Cubic spline instead
                 # cs = CubicSpline(t, data[jj])
@@ -419,36 +405,110 @@ def plot_joint_trajectory(df, joint='wri', task='FtnR', subjs='All', cycle=1, si
         ax[i].legend(subjs)
 
 
+#compute distance (scalar) of a joint from ref point (nose) normalized by body segment length (trunk)
+#remove outliers above 2std deviations
+#dfs is the dataframe with all joint positions (poses)
+#jj is the joint to compute distance
+#returns a Series with index and joint distance (eg wriR_), Remember to add _ at the end
+def dist_from_ref(dfs, jj):
+    data = dfs.copy()
+    #missing detections for current joint
+    data.loc[data[jj+'x'] == 0, jj+'x'] = np.nan
+    data.loc[data[jj+'y'] == 0, jj+'y'] = np.nan
 
-#plot PSD of univariate data
-def plot_PSD(df, subj, jj, task, cycles, ax, col=None, alpha=0.5):
-    Fs = 30 #sampling frequency (frame rate)
-    cols = ['g','r']
-    legend_sc = []
-    for s, cycle in product(subj,cycles):
-        dfs = df.query('SubjID == @s & Task==@task & cycle==@cycle').copy()
-        if len(dfs)>0:
+    # #remove missed detections (0s in both coords) for current joint (maybe change with nans)
+    # data = data[ (data[jj+'x'] > 0) & (data[jj+'y'] > 0)]
 
-            if 'Ftn' in task:
-                p=dist_from_ref(dfs,jj)
-            else:
-                _, _, theta, _ = handpose(dfs)
-                p = lowpass(theta['pinkyR'])
+    #normalization factor (hip length)
+    L = (np.sqrt( (data.midHip_x -data.neck_x)**2 + (data.midHip_y-data.neck_y)**2) ) #trunk length (ref length)
+    L = removeOutliers(L, 2, returnZ=False, interp=True) #remove outliers and linearly interpolate
 
-            f, Pxx_den = welch(p,fs=Fs,nperseg=min(len(p),512))
+    #Detrend data: distance from nose (ref point) normalized by trunk length
+    p = (np.sqrt((data[jj+'x'] - data.nose_x)**2 + (data[jj+'y'] - data.nose_y)**2))/L
 
-            if col is not None:
-                col = cols[int(dfs.symptom.unique())]
-            ax[0].plot(p.index/Fs, p, 'o-', markerSize=3, c=col, alpha=alpha)
-            ax[1].plot(f, Pxx_den, alpha=alpha, c=col)
-            legend_sc.append((s,cycle))
-        else:
-            continue
-    ax[0].grid(); ax[1].grid(); ax[1].set_xlim([-0.5,6])
-    ax[1].legend(legend_sc)
-    plt.show()
+    #outlier rejection and z-score
+    pclean = removeOutliers(p, 2, returnZ=True, interp=False)
+    #smooth data
+    try:
+        pfilt =  pd.Series(index=pclean.index, data=signal.savgol_filter(pclean, 13, 2))
+    except:
+        print('filter fitting failed - not filtering data')
+        pfilt = pclean.copy()
+
+    # data.dropna(inplace=True)
+    return pfilt
 
 
+
+#return dataframe with distance of specified hand joint from ref point (nose or neck) for a subject
+def hand_trajectory_nose(df, subj, joint='index', side='R', task='FtnR', cycle=1):
+
+    Fs = 30
+    data = df.query('SubjID == @subj & Task==@task & cycle==@cycle').copy()
+    jj = joint+side+'_'
+    #missing detections for current joint
+    data.loc[data[jj+'x'] == 0, jj+'x'] = np.nan
+    data.loc[data[jj+'y'] == 0, jj+'y'] = np.nan
+    # data[jj+'x'].interpolate(inplace=True) #Do not interpolate - for now
+    # data[jj+'y'].interpolate(inplace=True)
+
+    #normalization factor (hip length)
+    L = (np.sqrt( (data.midHip_x -data.neck_x)**2 + (data.midHip_y-data.neck_y)**2) ) #trunk length (ref length)
+    L = removeOutliers(L, 2, returnZ=False) #remove outliers and linearly interpolate missing points (need to reject if not enough points)
+    L = np.nanmedian(L) #assume person is not moving away from camera 
+
+    #Detrend data: distance from ref point (nose or neck) normalized by trunk length
+    p = (np.sqrt((data[jj+'x'] - data.neck_x)**2 + (data[jj+'y'] - data.neck_y)**2)) / L
+    # p = (np.sqrt((data[jj+'x'] - data.nose_x)**2 + (data[jj+'y'] - data.nose_y)**2)) / L #nose is more noisy - not sure why
+    data[jj] = p
+
+    #outlier rejection
+    data[jj] = removeOutliers(data[jj], 2, returnZ=False, interp=True) #remove outliers and interpolate - CONSIDER doing this step for each joint first
+    # data.dropna(inplace=True)
+
+    #remove DC offset (mean)
+    data[jj] = bandpass(data[jj], cutoff=[.25,10])
+
+    #filter (band pass or savgol)
+    data[jj] = signal.savgol_filter(data[jj], 13, 3)
+    # data[jj] = bandpass(data[jj], cutoff=[.5,3])
+
+    data[jj].index = data[jj].index / Fs #index in secs
+
+    return data[jj]
+
+#** BRADYKINESIA FEATURES ** 
+ #compute bradykinesia features over windows
+ #input time series of joint positions (INDEX HAS TO BE TIME in Secs)
+ #output dataframe with features for each
+def compute_features_brady(x, winlen=3, overlap=0):
+
+    Fs = 30 #sampling rate
+    flist = ['F_dom', 'F_dom_ratio', 'entropy_psd', 'RMS']
+ 
+    #initialize dictionary with features for each hand joint
+    F = pd.DataFrame(data=[], columns=flist)
+
+    T = x.index[-1] #signal duration
+    step = winlen - (overlap*winlen)
+    starts = np.arange(0,T,step)
+    ends = starts+winlen 
+    starts = starts[starts+winlen <= T]
+    times = zip(starts,ends)
+    
+    #aggregate features across all hand joints
+    #compute features on each window
+    for ts, te in times:
+    
+        x_win = x[ts:te].copy()
+        f = compute_features(x_win, idx=te) #windowed features
+        F = pd.concat((F,f), axis=0)
+
+    return F
+
+
+
+#** TREMOR FEATURES ** 
 #distance of each fingertip from a body landmark
 def hand_tremor(df, s, task='Sitng', cycle=1):
 
@@ -456,7 +516,7 @@ def hand_tremor(df, s, task='Sitng', cycle=1):
     #normalization factor (hip length)
     L = (np.sqrt( (data.midHip_x -data.neck_x)**2 + (data.midHip_y-data.neck_y)**2) ) #trunk length (ref length)
     L = removeOutliers(L, 2, returnZ=False, interp=True) #remove outliers and linearly interpolate
-    L = np.nanmedian(L) #trunk length should be approx constant 
+    L = np.nanmedian(L) #trunk length should be approx constant across frames (for sitting!)
 
     joints = ['thumbR_','indexR_', 'pinkyR_','thumbL_','indexL_', 'pinkyL_', 'neck_']
     joints_xy = []
@@ -468,13 +528,13 @@ def hand_tremor(df, s, task='Sitng', cycle=1):
     #interpolate thru missing detections, remove outliers and interpolate again
     data[data==0] = np.nan
     data = data.interpolate()
-    data.apply(removeOutliers, args=(2, False, True))
+    # data.apply(removeOutliers, args=(2, False, True)) - CHECK THIS LINE - IT WAS NOT DOING ANYTHING 2/13/2020
 
     #distance of each joint from ref point
     joints = ['thumbR_','indexR_', 'pinkyR_','thumbL_','indexL_', 'pinkyL_']
     hand = pd.DataFrame(data=[], columns=joints)
     for jj in joints:
-        d = np.sqrt( (data[jj+'x'] - data.neck_x)**2 + (data[jj+'y'] - data.neck_y)**2 ) #/ (L*0.1)
+        d = np.sqrt( (data[jj+'x'] - data.neck_x)**2 + (data[jj+'y'] - data.neck_y)**2 ) / (L*0.1)
         hand[jj] = d
 
     hand = hand.apply(removeOutliers, args=(2,False,True))
@@ -497,22 +557,27 @@ def compute_features(x, idx=0, Fs=30):
         #power at peak freq over tot power
         F_dom_ratio = max(Pxx_den)/sum(Pxx_den)
 
-        #Range of signal amplitude
-        Range = x.max() - x.min()
+        # #Range of signal amplitude
+        # Range = x.max() - x.min()
+        #kurtosis of PSD
+        # kurtosis = kurtosis(Pxx_den)
+        #Spectral Entropy
+        psd_norm = Pxx_den/sum(Pxx_den)
+        entropy_psd = entropy(psd_norm, base=2)
 
         #RMS (or std dev of signal)
         RMS = np.sqrt((x**2).sum() / len(x))
 
-        f = {'F_dom':F_dom, 'F_dom_ratio':F_dom_ratio, 'Range':Range, 'RMS':RMS}
+        f = {'F_dom':F_dom, 'F_dom_ratio':F_dom_ratio, 'entropy_psd':entropy_psd, 'RMS':RMS}
 
         return(pd.DataFrame(f, index=[idx]))
 
 
 #input data frame with hand joint distances from ref point
-def compute_features_hand(hand_df, winlen=3, joint=None):
+def compute_features_tremor(hand_df, winlen=3, joint=None):
 
     Fs = 30 #sampling rate
-    flist = ['F_dom', 'F_dom_ratio', 'Range', 'RMS']
+    flist = ['F_dom', 'F_dom_ratio', 'entropy_psd', 'RMS']
 
     #compute features for all joints unless specified
     if joint is not None:
@@ -571,6 +636,7 @@ def bandpass(x, cutoff=[2,7], Fs=30):
     x.interpolate()  #interpolate if nan
     xfilt = x.copy() #keep a copy to deal with nans at beginning and return array of same size as x
     x.dropna(inplace=True)
+    # print(len(x))
     cutoff_norm = [c / (0.5 * Fs) for c in cutoff]
     b,a = butter(4, cutoff_norm, btype='bandpass', analog=False)
     xfilt_ = signal.filtfilt(b,a,x)
@@ -580,6 +646,33 @@ def bandpass(x, cutoff=[2,7], Fs=30):
 
 
 
+#plot PSD of univariate data
+def plot_PSD(df, subj, jj, task, cycles, ax, col=None, alpha=0.5):
+    Fs = 30 #sampling frequency (frame rate)
+    cols = ['g','r']
+    legend_sc = []
+    for s, cycle in product(subj,cycles):
+        dfs = df.query('SubjID == @s & Task==@task & cycle==@cycle').copy()
+        if len(dfs)>0:
+
+            if 'Ftn' in task:
+                p=dist_from_ref(dfs,jj)
+            else:
+                _, _, theta, _ = handpose(dfs)
+                p = lowpass(theta['pinkyR'])
+
+            f, Pxx_den = welch(p,fs=Fs,nperseg=min(len(p),512))
+
+            if col is not None:
+                col = cols[int(dfs.symptom.unique())]
+            ax[0].plot(p.index/Fs, p, 'o-', markerSize=3, c=col, alpha=alpha)
+            ax[1].plot(f, Pxx_den, alpha=alpha, c=col)
+            legend_sc.append((s,cycle))
+        else:
+            continue
+    ax[0].grid(); ax[1].grid(); ax[1].set_xlim([-0.5,6])
+    ax[1].legend(legend_sc)
+    plt.show()
 
 
 #
