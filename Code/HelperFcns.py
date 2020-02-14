@@ -405,43 +405,13 @@ def plot_joint_trajectory(df, joint='wri', task='FtnR', subjs='All', cycle=1, si
         ax[i].legend(subjs)
 
 
-#compute distance (scalar) of a joint from ref point (nose) normalized by body segment length (trunk)
-#remove outliers above 2std deviations
-#dfs is the dataframe with all joint positions (poses)
-#jj is the joint to compute distance
-#returns a Series with index and joint distance (eg wriR_), Remember to add _ at the end
-def dist_from_ref(dfs, jj):
-    data = dfs.copy()
-    #missing detections for current joint
-    data.loc[data[jj+'x'] == 0, jj+'x'] = np.nan
-    data.loc[data[jj+'y'] == 0, jj+'y'] = np.nan
-
-    # #remove missed detections (0s in both coords) for current joint (maybe change with nans)
-    # data = data[ (data[jj+'x'] > 0) & (data[jj+'y'] > 0)]
-
-    #normalization factor (hip length)
-    L = (np.sqrt( (data.midHip_x -data.neck_x)**2 + (data.midHip_y-data.neck_y)**2) ) #trunk length (ref length)
-    L = removeOutliers(L, 2, returnZ=False, interp=True) #remove outliers and linearly interpolate
-
-    #Detrend data: distance from nose (ref point) normalized by trunk length
-    p = (np.sqrt((data[jj+'x'] - data.nose_x)**2 + (data[jj+'y'] - data.nose_y)**2))/L
-
-    #outlier rejection and z-score
-    pclean = removeOutliers(p, 2, returnZ=True, interp=False)
-    #smooth data
-    try:
-        pfilt =  pd.Series(index=pclean.index, data=signal.savgol_filter(pclean, 13, 2))
-    except:
-        print('filter fitting failed - not filtering data')
-        pfilt = pclean.copy()
-
-    # data.dropna(inplace=True)
-    return pfilt
 
 
 
 #return dataframe with distance of specified hand joint from ref point (nose or neck) for a subject
-def hand_trajectory_nose(df, subj, joint='index', side='R', task='FtnR', cycle=1):
+#df is the dataframe with all joint positions (poses)
+#jj is the joint to compute distance
+def dist_from_ref(df, subj, joint='index', side='R', task='FtnR', cycle=1, filter='bradykinesia'):
 
     Fs = 30
     data = df.query('SubjID == @subj & Task==@task & cycle==@cycle').copy()
@@ -449,7 +419,7 @@ def hand_trajectory_nose(df, subj, joint='index', side='R', task='FtnR', cycle=1
     #missing detections for current joint
     data.loc[data[jj+'x'] == 0, jj+'x'] = np.nan
     data.loc[data[jj+'y'] == 0, jj+'y'] = np.nan
-    # data[jj+'x'].interpolate(inplace=True) #Do not interpolate - for now
+    # data[jj+'x'].interpolate(inplace=True) #Do not interpolate for now
     # data[jj+'y'].interpolate(inplace=True)
 
     #normalization factor (hip length)
@@ -466,12 +436,15 @@ def hand_trajectory_nose(df, subj, joint='index', side='R', task='FtnR', cycle=1
     data[jj] = removeOutliers(data[jj], 2, returnZ=False, interp=True) #remove outliers and interpolate - CONSIDER doing this step for each joint first
     # data.dropna(inplace=True)
 
-    #remove DC offset (mean)
-    data[jj] = bandpass(data[jj], cutoff=[.25,10])
-
-    #filter (band pass or savgol)
-    data[jj] = signal.savgol_filter(data[jj], 13, 3)
-    # data[jj] = bandpass(data[jj], cutoff=[.5,3])
+    #filtering
+    if filter == 'bradykinesia':
+        #remove DC offset (mean)
+        data[jj] = bandpass(data[jj], cutoff=[.25,10])
+        #filter (band pass or savgol)
+        data[jj] = signal.savgol_filter(data[jj], 13, 3)
+        # data[jj] = bandpass(data[jj], cutoff=[.5,3])
+    elif filter == 'tremor':
+        data[jj] = bandpass(data[jj])
 
     data[jj].index = data[jj].index / Fs #index in secs
 
@@ -481,7 +454,7 @@ def hand_trajectory_nose(df, subj, joint='index', side='R', task='FtnR', cycle=1
  #compute bradykinesia features over windows
  #input time series of joint positions (INDEX HAS TO BE TIME in Secs)
  #output dataframe with features for each
-def compute_features_brady(x, winlen=3, overlap=0):
+def compute_features_oneside(x, winlen=3, overlap=0):
 
     Fs = 30 #sampling rate
     flist = ['F_dom', 'F_dom_ratio', 'entropy_psd', 'RMS']
@@ -499,9 +472,9 @@ def compute_features_brady(x, winlen=3, overlap=0):
     #aggregate features across all hand joints
     #compute features on each window
     for ts, te in times:
-    
+        
         x_win = x[ts:te].copy()
-        f = compute_features(x_win, idx=te) #windowed features
+        f = compute_features(x_win, idx=(ts+te)/2) #windowed features
         F = pd.concat((F,f), axis=0)
 
     return F
@@ -574,7 +547,7 @@ def compute_features(x, idx=0, Fs=30):
 
 
 #input data frame with hand joint distances from ref point
-def compute_features_tremor(hand_df, winlen=3, joint=None):
+def compute_features_tremor(hand_df, winlen=3, overlap=0, joint=None):
 
     Fs = 30 #sampling rate
     flist = ['F_dom', 'F_dom_ratio', 'entropy_psd', 'RMS']
@@ -592,10 +565,16 @@ def compute_features_tremor(hand_df, winlen=3, joint=None):
     handbp = hand_df.apply(bandpass).copy()
     handbp.index = handbp.index / Fs
     T = handbp.index[-1] #signal duration
-    times = np.arange(0, T, winlen)
-    t1 = times[:-1]
-    t2 = times[1:]
-    times = zip(t1,t2)
+    step = winlen - (overlap*winlen)
+    starts = np.arange(0,T,step)
+    ends = starts+winlen 
+    starts = starts[starts+winlen <= T]
+    times = zip(starts,ends)
+    #no overlap
+    # times = np.arange(0, T, winlen)
+    # t1 = times[:-1]
+    # t2 = times[1:]
+    # times = zip(t1,t2)
 
     #aggregate features across all hand joints
     #compute features on each window
@@ -674,6 +653,41 @@ def plot_PSD(df, subj, jj, task, cycles, ax, col=None, alpha=0.5):
     ax[1].legend(legend_sc)
     plt.show()
 
+
+#compute distance (scalar) of a joint from ref point (nose) normalized by body segment length (trunk)
+#remove outliers above 2std deviations
+#dfs is the dataframe with all joint positions (poses)
+#jj is the joint to compute distance
+#returns a Series with index and joint distance (eg wriR_), Remember to add _ at the end
+# def dist_from_ref(dfs, jj):
+#     data = dfs.copy()
+#     #missing detections for current joint
+#     data.loc[data[jj+'x'] == 0, jj+'x'] = np.nan
+#     data.loc[data[jj+'y'] == 0, jj+'y'] = np.nan
+
+#     # #remove missed detections (0s in both coords) for current joint (maybe change with nans)
+#     # data = data[ (data[jj+'x'] > 0) & (data[jj+'y'] > 0)]
+
+#     #normalization factor (hip length)
+#     L = (np.sqrt( (data.midHip_x -data.neck_x)**2 + (data.midHip_y-data.neck_y)**2) ) #trunk length (ref length)
+#     L = removeOutliers(L, 2, returnZ=False, interp=True) #remove outliers and linearly interpolate
+
+#     #Detrend data: distance from nose (ref point) normalized by trunk length
+#     p = (np.sqrt((data[jj+'x'] - data.nose_x)**2 + (data[jj+'y'] - data.nose_y)**2))/L
+
+#     #outlier rejection and z-score
+#     pclean = removeOutliers(p, 2, returnZ=True, interp=False)
+#     #smooth data
+#     try:
+#         pfilt =  pd.Series(index=pclean.index, data=signal.savgol_filter(pclean, 13, 2))
+#     except:
+#         print('filter fitting failed - not filtering data')
+#         pfilt = pclean.copy()
+
+#     # data.dropna(inplace=True)
+#   return pfilt
+
+#     
 
 #
 # def plot_joint_trajectory_norm(df, task='FtnR', subjs='All', cycle=1, size=8, colormap=False):
