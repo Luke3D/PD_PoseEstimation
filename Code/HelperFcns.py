@@ -7,6 +7,7 @@ from scipy import stats, signal
 from scipy.stats import skew, kurtosis, entropy
 from scipy.signal import welch, butter
 from scipy.interpolate import CubicSpline
+from sklearn.utils import resample
 from itertools import product
 from numpy.linalg import multi_dot
 import matplotlib.pyplot as plt
@@ -356,7 +357,7 @@ def plot_joint_trajectory(df, joint='wri', task='FtnR', subjs='All', cycle=1, si
             #normalization factor (hip length)
             L = (np.sqrt( (data.midHip_x -data.neck_x)**2 + (data.midHip_y-data.neck_y)**2) ) #trunk length (ref length)
             L = removeOutliers(L, 2, returnZ=False) #remove outliers and linearly interpolate missing points (need to reject if not enough points)
-            # L = np.nanmedian(L) #assume person is not moving away from camera 
+            L = np.nanmedian(L) #assume person is not moving away from camera 
 
             #Detrend data: distance from nose (ref point) normalized by trunk length
             # data[['nose_x','nose_y']] = data[['nose_x','nose_y']].apply(removeOutliers, args=(2, False, True))
@@ -444,7 +445,10 @@ def dist_from_ref(df, subj, joint='index', side='R', task='FtnR', cycle=1, filte
         data[jj] = signal.savgol_filter(data[jj], 13, 3)
         # data[jj] = bandpass(data[jj], cutoff=[.5,3])
     elif filter == 'tremor':
-        data[jj] = bandpass(data[jj])
+        data[jj] = bandpass(data[jj], cutoff=[3,7])
+    elif filter is None:
+        print('No bandpass filter')
+        data[jj] = bandpass(data[jj], cutoff=[.5,10])
 
     data[jj].index = data[jj].index / Fs #index in secs
 
@@ -472,7 +476,7 @@ def compute_features_oneside(x, winlen=3, overlap=0):
     #aggregate features across all hand joints
     #compute features on each window
     for ts, te in times:
-        
+
         x_win = x[ts:te].copy()
         f = compute_features(x_win, idx=(ts+te)/2) #windowed features
         F = pd.concat((F,f), axis=0)
@@ -512,6 +516,11 @@ def hand_tremor(df, s, task='Sitng', cycle=1):
 
     hand = hand.apply(removeOutliers, args=(2,False,True))
     # hand.dropna(inplace=True)
+
+    #add confidence for each joint detection
+    # joints_c = [j+'c' for j in joints]
+    # df[]
+
     return hand
 
 
@@ -536,7 +545,7 @@ def compute_features(x, idx=0, Fs=30):
         # kurtosis = kurtosis(Pxx_den)
         #Spectral Entropy
         psd_norm = Pxx_den/sum(Pxx_den)
-        entropy_psd = entropy(psd_norm, base=2)
+        entropy_psd = entropy(psd_norm, base=2)/np.log2(len(f))
 
         #RMS (or std dev of signal)
         RMS = np.sqrt((x**2).sum() / len(x))
@@ -580,19 +589,18 @@ def compute_features_tremor(hand_df, winlen=3, overlap=0, joint=None):
     #compute features on each window
     idx = 0
     for ts, te in times:
-        idx+=1
         dft = handbp[ts:te].copy()
 
         #compute features on each L joint
         for jj in [i for i in dft.columns if 'L_' in i]:
             dft_j = dft[jj].copy()
-            f = compute_features(dft_j, idx)
+            f = compute_features(dft_j, idx=(ts+te)/2)
             F_L = pd.concat((F_L, f), axis=0)
 
         #compute features on each R joint
         for jj in [i for i in dft.columns if 'R_' in i]:
             dft_j = dft[jj].copy()
-            f = compute_features(dft_j, idx)
+            f = compute_features(dft_j, idx=(ts+te)/2)
             F_R = pd.concat((F_R, f), axis=0)
 
         #***can add cross correlation across hands as additional feature***
@@ -610,7 +618,7 @@ def lowpass(x, cutoff=3, Fs=30):
     xfilt = signal.filtfilt(b,a,x)
     return xfilt
 
-def bandpass(x, cutoff=[2,7], Fs=30):
+def bandpass(x, cutoff=[3,7], Fs=30):
 
     x.interpolate()  #interpolate if nan
     xfilt = x.copy() #keep a copy to deal with nans at beginning and return array of same size as x
@@ -623,6 +631,42 @@ def bandpass(x, cutoff=[2,7], Fs=30):
 
     return xfilt
 
+
+def bootstrapci(x, n=1000, ci=95):
+    #compute the statistics (mean or median) on each bootstrap sample
+    statistic = []
+    for i in range(n):
+        x_res = resample(x, replace=True)
+        # statistic.append(np.nanmean(x_res))
+        statistic.append(np.nanmedian(x_res))
+    statistic = np.sort(statistic)
+    #select corresponding percentile
+    ci = np.percentile(statistic,[0.25, 97.5])
+    return(ci)
+
+
+def plot_data_and_features(x, F, F0_ci, feat='F_dom_ratio'):
+
+    # sns.set_context('talk', font_scale=1)
+    fig, ax1 = plt.subplots(figsize=(5,5))
+    color = 'tab:blue'
+    ax1.set_xlabel('time (s)')
+    ax1.set_ylabel('finger movement [AU]', color=color)
+    ax1.plot(x.index, x, color=color)
+    ax1.grid()
+    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+
+    color = 'tab:red'
+    ax2.set_ylabel(feat, color=color)  # we already handled the x-label with ax1
+    ax2.plot(F[feat].groupby(F.index).median().index, F[feat].groupby(F.index).median(), color=color)
+
+    #plot confidence interval of no-symptom distribution
+    x = x.index
+    y1 = F0_ci.iloc[0][feat]; y2 = F0_ci.iloc[1][feat]
+    ax2.axhline(y=y1, c='k')
+    ax2.axhline(y=y2, c='k')
+    ax2.fill_between(x, y1, y2, color='g', alpha=0.5)
+    # ax2.set_ylim([0,1])
 
 
 #plot PSD of univariate data
