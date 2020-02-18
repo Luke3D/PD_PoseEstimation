@@ -618,7 +618,7 @@ def lowpass(x, cutoff=3, Fs=30):
     xfilt = signal.filtfilt(b,a,x)
     return xfilt
 
-def bandpass(x, cutoff=[3,7], Fs=30):
+def bandpass(x, cutoff=[2,7], Fs=30):
 
     x.interpolate()  #interpolate if nan
     xfilt = x.copy() #keep a copy to deal with nans at beginning and return array of same size as x
@@ -645,7 +645,7 @@ def bootstrapci(x, n=1000, ci=95):
     return(ci)
 
 
-def plot_data_and_features(x, F, F0_ci, feat='F_dom_ratio'):
+def plot_data_and_features(x, F, F0, F0_ci, feat='F_dom_ratio'):
 
     # sns.set_context('talk', font_scale=1)
     fig, ax1 = plt.subplots(figsize=(5,5))
@@ -662,7 +662,17 @@ def plot_data_and_features(x, F, F0_ci, feat='F_dom_ratio'):
 
     #plot confidence interval of no-symptom distribution
     x = x.index
-    y1 = F0_ci.iloc[0][feat]; y2 = F0_ci.iloc[1][feat]
+
+    #use mean + std
+    # mu = F0[feat].mean(); std = F0[feat].std()
+    # y1 = mu - std; y2 = mu + std
+   
+    #use IQR
+    y1 = F0[feat].quantile(.25); y2 = F0[feat].quantile(.75)
+
+    #plot mean 95% CI 
+    # y1 = F0_ci.iloc[0][feat]; y2 = F0_ci.iloc[1][feat]
+
     ax2.axhline(y=y1, c='k')
     ax2.axhline(y=y2, c='k')
     ax2.fill_between(x, y1, y2, color='g', alpha=0.5)
