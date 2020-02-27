@@ -8,6 +8,7 @@ from scipy.stats import skew, kurtosis, entropy
 from scipy.signal import welch, butter
 from scipy.interpolate import CubicSpline
 from sklearn.utils import resample
+from nolds import sampen
 from itertools import product
 from numpy.linalg import multi_dot
 import matplotlib.pyplot as plt
@@ -394,10 +395,10 @@ def dist_from_ref(df, subj, joint='index', side='R', task='FtnR', cycle=1, filte
 def compute_features_oneside(x, winlen=3, overlap=0, filter='bradykinesia'):
 
     Fs = 30 #sampling rate
-    flist = ['F_dom', 'F_dom_ratio', 'entropy_psd', 'RMS']
  
     #initialize dictionary with features for each hand joint
-    F = pd.DataFrame(data=[], columns=flist)
+    # F = pd.DataFrame(data=[], columns=flist)
+    F = pd.DataFrame(data=[], columns=[])
 
     T = x.index[-1] #signal duration
     step = winlen - (overlap*winlen)
@@ -479,11 +480,25 @@ def compute_features(x, idx=0, Fs=30):
         #Spectral Entropy
         psd_norm = Pxx_den/sum(Pxx_den)
         entropy_psd = entropy(psd_norm, base=2)/np.log2(len(f))
+        #sample entropy of speed
+        # sen = sampen(x.diff().dropna())
+        #variance of speed 
+        spd_var = x.diff().dropna().std()
+
 
         #RMS (or std dev of signal)
         RMS = np.sqrt((x**2).sum() / len(x))
 
-        f = {'F_dom':F_dom, 'F_dom_ratio':F_dom_ratio, 'entropy_psd':entropy_psd, 'RMS':RMS}
+        #RMS jerk        
+        jerk = x.diff().diff().diff()
+        jerk_RMS = np.sqrt((jerk**2).sum() / len(jerk))
+
+        #feature sets
+        # f = {'F_dom':F_dom, 'F_dom_ratio':F_dom_ratio, 'entropy_psd':entropy_psd, 'RMS':RMS}
+        # f = {'F_dom':F_dom, 'F_dom_ratio':F_dom_ratio, 'sample_entropy':sen, 'RMS':RMS}
+        f = {'F_dom':F_dom, 'F_dom_ratio':F_dom_ratio, 'spd_var':spd_var, 'jerk_RMS':jerk_RMS}
+
+
 
         return(pd.DataFrame(f, index=[idx]))
 
