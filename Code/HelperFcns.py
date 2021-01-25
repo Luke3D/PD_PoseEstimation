@@ -55,8 +55,6 @@ def saveposes_s(datapath = Path('C:/openpose/output/') , subjs=None, posefile=No
                             except(UnicodeDecodeError):
                                 print('cannot parse ',str(file))
 
-                        person = 0 #for now use first person detected (need to be updated)
-
                         #frame nr from filename
                         str1 = file.as_posix()
                         match = re.search(r'\d+_keypoints',str1)
@@ -66,32 +64,35 @@ def saveposes_s(datapath = Path('C:/openpose/output/') , subjs=None, posefile=No
                             print('missing frame')
                             frame_nr = -1
 
-                        try:
-                            pose = data['people'][person]['pose_keypoints_2d']
-                            pose_hand_L = data['people'][person]['hand_left_keypoints_2d']
-                            pose_hand_R = data['people'][person]['hand_right_keypoints_2d']
-                            d = {'SubjID':subj, 'Task':task, 'cycle':cycle,
-                                 'elbR_x':pose[9], 'elbR_y':pose[10], 'elbR_c':pose[11], 'wriR_x':pose[12], 'wriR_y':pose[13], 'wriR_c':pose[14],
-                                 'elbL_x':pose[18], 'elbL_y':pose[19], 'elbL_c':pose[20], 'wriL_x':pose[21], 'wriL_y':pose[22], 'wriL_c':pose[23],
-                                 'nose_x':pose[0], 'nose_y':pose[1], 'nose_c':pose[2], 'neck_x':pose[3], 'neck_y':pose[4], 'neck_c':pose[5],
-                                 'midHip_x':pose[24], 'midHip_y':pose[25], 'midHip_c':pose[26],
-                                 'thumbR_x':pose_hand_R[12], 'thumbR_y':pose_hand_R[13], 'thumbR_c':pose_hand_R[14],
-                                 'indexR_x':pose_hand_R[24], 'indexR_y':pose_hand_R[25], 'indexR_c':pose_hand_R[26],
-                                 'midR_x':pose_hand_R[36], 'midR_y':pose_hand_R[37], 'midR_c':pose_hand_R[38],
-                                 'ringR_x':pose_hand_R[48], 'ringR_y':pose_hand_R[49], 'ringR_c':pose_hand_R[50],
-                                 'pinkyR_x':pose_hand_R[60], 'pinkyR_y':pose_hand_R[61], 'pinkyR_c':pose_hand_R[62],
-                                 'thumbL_x':pose_hand_L[12], 'thumbL_y':pose_hand_L[13], 'thumbL_c':pose_hand_L[14],
-                                 'indexL_x':pose_hand_L[24], 'indexL_y':pose_hand_L[25], 'indexL_c':pose_hand_L[26],
-                                 'midL_x':pose_hand_L[36], 'midL_y':pose_hand_L[37], 'midL_c':pose_hand_L[38],
-                                 'ringL_x':pose_hand_L[48], 'ringL_y':pose_hand_L[49], 'ringL_c':pose_hand_L[50],
-                                 'pinkyL_x':pose_hand_L[60], 'pinkyL_y':pose_hand_L[61], 'pinkyL_c':pose_hand_L[62],
-                                 'Npeople':len(data['people'])
-                        }
-                            df = pd.concat((df,pd.DataFrame(d, index=[frame_nr])))
+                        # person = 0
+                        for person in range(len(data['people'])):
 
-                        except(IndexError):
-                            print('No pose data found in frame {}'.format(frame_nr))
-                            continue
+                            try:
+                                pose = data['people'][person]['pose_keypoints_2d']
+                                pose_hand_L = data['people'][person]['hand_left_keypoints_2d']
+                                pose_hand_R = data['people'][person]['hand_right_keypoints_2d']
+                                d = {'SubjID':subj, 'Task':task, 'cycle':cycle, 'personID':person,
+                                     'elbR_x':pose[9], 'elbR_y':pose[10], 'elbR_c':pose[11], 'wriR_x':pose[12], 'wriR_y':pose[13], 'wriR_c':pose[14],
+                                     'elbL_x':pose[18], 'elbL_y':pose[19], 'elbL_c':pose[20], 'wriL_x':pose[21], 'wriL_y':pose[22], 'wriL_c':pose[23],
+                                     'nose_x':pose[0], 'nose_y':pose[1], 'nose_c':pose[2], 'neck_x':pose[3], 'neck_y':pose[4], 'neck_c':pose[5],
+                                     'midHip_x':pose[24], 'midHip_y':pose[25], 'midHip_c':pose[26],
+                                     'thumbR_x':pose_hand_R[12], 'thumbR_y':pose_hand_R[13], 'thumbR_c':pose_hand_R[14],
+                                     'indexR_x':pose_hand_R[24], 'indexR_y':pose_hand_R[25], 'indexR_c':pose_hand_R[26],
+                                     'midR_x':pose_hand_R[36], 'midR_y':pose_hand_R[37], 'midR_c':pose_hand_R[38],
+                                     'ringR_x':pose_hand_R[48], 'ringR_y':pose_hand_R[49], 'ringR_c':pose_hand_R[50],
+                                     'pinkyR_x':pose_hand_R[60], 'pinkyR_y':pose_hand_R[61], 'pinkyR_c':pose_hand_R[62],
+                                     'thumbL_x':pose_hand_L[12], 'thumbL_y':pose_hand_L[13], 'thumbL_c':pose_hand_L[14],
+                                     'indexL_x':pose_hand_L[24], 'indexL_y':pose_hand_L[25], 'indexL_c':pose_hand_L[26],
+                                     'midL_x':pose_hand_L[36], 'midL_y':pose_hand_L[37], 'midL_c':pose_hand_L[38],
+                                     'ringL_x':pose_hand_L[48], 'ringL_y':pose_hand_L[49], 'ringL_c':pose_hand_L[50],
+                                     'pinkyL_x':pose_hand_L[60], 'pinkyL_y':pose_hand_L[61], 'pinkyL_c':pose_hand_L[62],
+                                     'Npeople':len(data['people'])
+                            }
+                                df = pd.concat((df,pd.DataFrame(d, index=[frame_nr])))
+
+                            except(IndexError):
+                                print('No pose data found in frame {}'.format(frame_nr))
+                                continue
 
                 else:
                     print('No pose files found')
@@ -282,7 +283,7 @@ def plot_joint_trajectory(df, joint='wri', task='FtnR', subjs='All', cycle=1, si
             #normalization factor (hip length)
             L = (np.sqrt( (data.midHip_x -data.neck_x)**2 + (data.midHip_y-data.neck_y)**2) ) #trunk length (ref length)
             L = removeOutliers(L, 2, returnZ=False) #remove outliers and linearly interpolate missing points (need to reject if not enough points)
-            L = np.nanmedian(L) #assume person is not moving away from camera 
+            L = np.nanmedian(L) #assume person is not moving away from camera
 
             #Detrend data: distance from nose (ref point) normalized by trunk length
             # data[['nose_x','nose_y']] = data[['nose_x','nose_y']].apply(removeOutliers, args=(2, False, True))
@@ -356,7 +357,7 @@ def dist_from_ref(df, subj, joint='index', side='R', task='FtnR', cycle=1, filte
     #normalization factor (hip length)
     L = (np.sqrt( (data.midHip_x -data.neck_x)**2 + (data.midHip_y-data.neck_y)**2) ) #trunk length (ref length)
     L = removeOutliers(L, 2, returnZ=False) #remove outliers and linearly interpolate missing points (need to reject if not enough points)
-    L = np.nanmedian(L) #assume person is not moving away from camera 
+    L = np.nanmedian(L) #assume person is not moving away from camera
 
     #Detrend data: distance from ref point (nose or neck) normalized by trunk length
     p = (np.sqrt((data[jj+'x'] - data.neck_x)**2 + (data[jj+'y'] - data.neck_y)**2)) / L
@@ -388,14 +389,14 @@ def dist_from_ref(df, subj, joint='index', side='R', task='FtnR', cycle=1, filte
 
     return data[jj]
 
-#** BRADYKINESIA FEATURES ** 
+#** BRADYKINESIA FEATURES **
  #compute bradykinesia features over windows
  #input time series of joint positions (INDEX HAS TO BE TIME in Secs)
  #output dataframe with features for each
 def compute_features_oneside(x, winlen=3, overlap=0, filter='bradykinesia'):
 
     Fs = 30 #sampling rate
- 
+
     #initialize dictionary with features for each hand joint
     # F = pd.DataFrame(data=[], columns=flist)
     F = pd.DataFrame(data=[], columns=[])
@@ -403,10 +404,10 @@ def compute_features_oneside(x, winlen=3, overlap=0, filter='bradykinesia'):
     T = x.index[-1] #signal duration
     step = winlen - (overlap*winlen)
     starts = np.arange(0,T,step)
-    ends = starts+winlen 
+    ends = starts+winlen
     starts = starts[starts+winlen <= T]
     times = zip(starts,ends)
-    
+
     #aggregate features across all hand joints
     #compute features on each window
     for ts, te in times:
@@ -419,7 +420,7 @@ def compute_features_oneside(x, winlen=3, overlap=0, filter='bradykinesia'):
 
 
 
-#** TREMOR FEATURES ** 
+#** TREMOR FEATURES **
 #distance of each fingertip from a body landmark
 def hand_tremor(df, s, task='Sitng', cycle=1):
 
@@ -482,14 +483,14 @@ def compute_features(x, idx=0, Fs=30):
         entropy_psd = entropy(psd_norm, base=2)/np.log2(len(f))
         #sample entropy of speed
         # sen = sampen(x.diff().dropna())
-        #variance of speed 
+        #variance of speed
         spd_var = x.diff().dropna().std()
 
 
         #RMS (or std dev of signal)
         RMS = np.sqrt((x**2).sum() / len(x))
 
-        #RMS jerk        
+        #RMS jerk
         jerk = x.diff().diff().diff()
         jerk_RMS = np.sqrt((jerk**2).sum() / len(jerk))
 
@@ -524,7 +525,7 @@ def compute_features_tremor(hand_df, winlen=3, overlap=0, joint=None):
     T = handbp.index[-1] #signal duration
     step = winlen - (overlap*winlen)
     starts = np.arange(0,T,step)
-    ends = starts+winlen 
+    ends = starts+winlen
     starts = starts[starts+winlen <= T]
     times = zip(starts,ends)
     #no overlap
@@ -614,11 +615,11 @@ def plot_data_and_features(x, F, F0, F0_ci, feat='F_dom_ratio'):
     #use mean + std
     # mu = F0[feat].mean(); std = F0[feat].std()
     # y1 = mu - std; y2 = mu + std
-   
+
     #use IQR
     y1 = F0[feat].quantile(.25); y2 = F0[feat].quantile(.75)
 
-    #plot mean 95% CI 
+    #plot mean 95% CI
     # y1 = F0_ci.iloc[0][feat]; y2 = F0_ci.iloc[1][feat]
 
     ax2.axhline(y=y1, c='k')
@@ -689,7 +690,7 @@ def plot_PSD(df, subj, jj, task, cycles, ax, col=None, alpha=0.5):
 #     # data.dropna(inplace=True)
 #   return pfilt
 
-#     
+#
 
 #
 # def plot_joint_trajectory_norm(df, task='FtnR', subjs='All', cycle=1, size=8, colormap=False):
