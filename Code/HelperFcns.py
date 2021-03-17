@@ -10,6 +10,7 @@ from scipy.interpolate import CubicSpline
 from sklearn.utils import resample
 from nolds import sampen
 from itertools import product
+# from tdqm import tdqm
 from numpy.linalg import multi_dot
 import matplotlib.pyplot as plt
 
@@ -48,11 +49,11 @@ def saveposes_s(datapath = Path('C:/openpose/output/') , subjs=None, posefile=No
                 if len(posefiles) > 0:
                     print(posefiles[0])
 
-                    for file in posefiles:
+                    for file in tqdm(posefiles):
                         with open(file) as f:
                             try:
                                 data = json.load(f)
-                            except(UnicodeDecodeError):
+                            except:
                                 print('cannot parse ',str(file))
 
                         #frame nr from filename
@@ -152,7 +153,7 @@ def removeOutliers(S, n_std=2, returnZ=True, interp=True):
 
 
 #
-def handpose(dfs):
+def handpose(dfs, side):
     data = dfs.copy()
 
     #trunk vector
@@ -162,7 +163,8 @@ def handpose(dfs):
 
     #hand poses (interpolate points for missing detections)
     hand = pd.DataFrame()
-    joints = ['thumbR_','indexR_', 'midR_', 'ringR_', 'pinkyR_']
+    joints = ['thumb','index', 'mid', 'ring', 'pinky']
+    joints = [j+side+'_' for j in joints]
     xs = ['x','y']
     for jj in product(joints,xs):
         j = ''.join(jj)
@@ -178,27 +180,16 @@ def handpose(dfs):
     hand = hand.apply(removeOutliers,args=(2,False,True))
 
     #thumb to other finger vector and angle relative to trunk vector
-    hj = ['indexR','midR','ringR','pinkyR']
+    hj = ['index','mid','ring','pinky']
+    hj = [j+side for j in hj]
     theta_all = pd.DataFrame(data=[], columns=hj)
     for jj in hj:
-        hR = pd.DataFrame({'x':hand.thumbR_x - hand[jj+'_x'], 'y':hand.thumbR_y - hand[jj+'_y']})
+        hR = pd.DataFrame({'x':hand['thumb'+side+'_x'] - hand[jj+'_x'], 'y':hand['thumb'+side+'_y'] - hand[jj+'_y']})
         hR = hR.apply(removeOutliers, args=(2,False,True))
         #angle between hand vector (thumb-pinky) and trunk vector
         dp, theta = dotprod_df(trunk, hR)
         theta_all[jj] = theta.interpolate()
     theta_all.apply(removeOutliers, args=(2,False,True))
-
-
-    #vector from index to others
-    # hj = ['midR','ringR','pinkyR']
-    # theta_all = pd.DataFrame(data=[], columns=hj)
-    # for jj in hj:
-    #     hR = pd.DataFrame({'x':hand.indexR_x - hand[jj+'_x'], 'y':hand.indexR_y - hand[jj+'_y']})
-    #     hR = hR.apply(removeOutliers, args=(2,False,True))
-    #     #angle between hand vector (thumb-pinky) and trunk vector
-    #     dp, theta = dotprod_df(trunk, hR)
-    #     theta_all[jj] = theta.interpolate()
-    # theta_all.apply(removeOutliers, args=(2,False,True))
 
 
     #confidence values for each finger
@@ -217,20 +208,28 @@ def handpose(dfs):
 
 
 
-def plot_hand_orientation(df, s, task='RamR', cycle=1, fingers=None):
+def plot_hand_orientation(df, s, side, cycle=1, task='RamR', fingers=['pinkyR'], savepath=None):
 
-    # s = 1043
-    # task = 'RamR'
     dfs = df.query('SubjID == @s & Task==@task & cycle==@cycle').copy()
-    hand, trunk, theta, theta_c = handpose(dfs)
+
+    if len(dfs) == 0:
+        print('no data found')
+        return None
+
+    hand, trunk, theta, theta_c = handpose(dfs, side)
 
     if fingers is None:
         fingers = theta.columns
 
     plt.figure(figsize=(12,6))
     for i in fingers:
-        print('median confidence {} = {}'.format(i, theta_c[i+'_c'].median()))
-        theta_filt = lowpass(theta[i])
+        print('mean confidence {} = {}'.format(i, theta_c[i+'_c'].mean()))
+        try:
+            theta_filt = signal.savgol_filter(theta[i], 13, 3)
+        except:
+            print('savgol filter fit failed')
+            print(len(theta[i]))
+            # theta_filt = lowpass(theta[i])
 
         try:
             # plt.plot(theta[i].index/30, signal.savgol_filter(theta[i].values, 9,3),'-', markersize=2, alpha=0.6)
@@ -242,7 +241,13 @@ def plot_hand_orientation(df, s, task='RamR', cycle=1, fingers=None):
         plt.scatter(theta[i].index/30, theta[i], s=12, c=theta_c[i+'_c'], cmap='cool', vmin=0, vmax=1, alpha=0.6)
 
     plt.legend(fingers)
+    plt.title(f'subj={s}, cycle={cycle}, side={side}')
     plt.grid()
+
+    if savepath is not None:
+        if not os.path.exists(savepath):
+            os.makedirs(savepath, exist_ok=True)
+        plt.savefig(os.path.join(savepath, str(f'{s}_{task}_{cycle}_{side}.jpg')), dpi=300)
 
 
 #plot left and right joint trajectory after removing outliers and smoothing
@@ -377,7 +382,10 @@ def dist_from_ref(df, subj, joint='index', side='R', task='FtnR', cycle=1, filte
         #remove DC offset (mean)
         data[jj] = bandpass(data[jj], cutoff=[.25,10])
         #filter (band pass or savgol)
-        data[jj] = signal.savgol_filter(data[jj], 13, 3)
+        try:
+            data[jj] = signal.savgol_filter(data[jj], 13, 3)
+        except:
+            print('savgol filter did not converge')
         # data[jj] = bandpass(data[jj], cutoff=[.5,3])
     elif filter == 'tremor':
         data[jj] = bandpass(data[jj], cutoff=[3,7])
@@ -393,7 +401,7 @@ def dist_from_ref(df, subj, joint='index', side='R', task='FtnR', cycle=1, filte
  #compute bradykinesia features over windows
  #input time series of joint positions (INDEX HAS TO BE TIME in Secs)
  #output dataframe with features for each
-def compute_features_oneside(x, winlen=3, overlap=0, filter='bradykinesia'):
+def compute_features_oneside(x, winlen=3, overlap=0):
 
     Fs = 30 #sampling rate
 
@@ -497,7 +505,7 @@ def compute_features(x, idx=0, Fs=30):
         #feature sets
         # f = {'F_dom':F_dom, 'F_dom_ratio':F_dom_ratio, 'entropy_psd':entropy_psd, 'RMS':RMS}
         # f = {'F_dom':F_dom, 'F_dom_ratio':F_dom_ratio, 'sample_entropy':sen, 'RMS':RMS}
-        f = {'F_dom':F_dom, 'F_dom_ratio':F_dom_ratio, 'spd_var':spd_var, 'jerk_RMS':jerk_RMS}
+        f = {'F_dom':F_dom, 'F_dom_ratio':F_dom_ratio, 'spd_var':spd_var, 'entropy_psd':entropy_psd}
 
 
 
